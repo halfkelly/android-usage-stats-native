@@ -90,6 +90,14 @@ th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--bord
 th { color: var(--text-3); font-weight: 500; font-size: 12px; }
 td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
+/* One column: a multi-column grid fills left-to-right, which hides the fact
+   that the list is ordered by time. */
+#exclude-list { max-height: 380px; overflow-y: auto; padding-right: 4px; }
+#exclude-list label { display: flex; gap: 10px; align-items: center;
+                      padding: 5px 2px; font-size: 13px; border-bottom: 1px solid var(--border); }
+#exclude-list label:last-child { border-bottom: 0; }
+#exclude-list .n { margin-left: auto; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
 .chain { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; }
 .chain h3 { font-size: 12px; color: var(--text-3); font-weight: 500; margin: 0 0 8px;
             text-transform: uppercase; letter-spacing: .05em; }
@@ -144,7 +152,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
         day blocks, and the pickup and switch-chain analysis. Shared with your
         other computer.
       </p>
-      <div id="exclude-list" class="chain"></div>
+      <div id="exclude-list"></div>
     </details>
   </div>
 
@@ -521,12 +529,12 @@ function safe(name, fn) {
 function renderExclude(choices, excluded) {
   const host = document.getElementById("exclude-list");
   const chosen = new Set(excluded || []);
-  host.innerHTML = (choices || []).map(a =>
-    `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px">
-       <input type="checkbox" data-pkg="${a.package}" ${chosen.has(a.package) ? "" : "checked"}>
-       <span>${a.label}</span>
-       <span class="n" style="margin-left:auto;color:var(--text-3)">${fmt(a.ms)}</span>
-     </label>`).join("");
+  // already sorted by time from the server; sort again so the panel never
+  // depends on the API's ordering
+  const rows = [...(choices || [])].sort((a, b) => b.ms - a.ms);
+  host.innerHTML = rows.map(a =>
+    `<label><input type="checkbox" data-pkg="${a.package}" ${chosen.has(a.package) ? "" : "checked"}>
+       <span>${a.label}</span><span class="n">${fmt(a.ms)}</span></label>`).join("");
 }
 
 document.getElementById("exclude-list").addEventListener("change", async e => {

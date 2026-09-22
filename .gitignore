@@ -1,0 +1,19 @@
+# Local runtime — never shared
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Machine-specific tooling (downloaded per machine)
+platform-tools/
+tools/
+
+# Data lives in the Google Drive archive, not in git:
+# it changes on every sync and would bloat the history.
+data/
+raw/
+
+# Android build artefacts, except the signed APK the Windows machine installs
+android/build/*
+!android/build/usagedump.apk
+android/debug.keystore

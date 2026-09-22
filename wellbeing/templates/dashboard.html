@@ -1,0 +1,612 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Usage</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f7f7f5; --surface: #fcfcfb; --border: #e4e3de;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #86857e;
+  --series: #2a78d6; --series-soft: #cde2fb;
+  --grid: #ececE8;
+  --s100:#cde2fb; --s200:#9ec5f4; --s300:#6da7ec; --s450:#2a78d6; --s550:#1c5cab; --s700:#0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131312; --surface: #1a1a19; --border: #34342f;
+    --text: #ffffff; --text-2: #c3c2b7; --text-3: #8d8c83;
+    --series: #3987e5; --series-soft: #184f95;
+    --grid: #2a2a27;
+    --s100:#0d366b; --s200:#184f95; --s300:#256abf; --s450:#3987e5; --s550:#6da7ec; --s700:#b7d3f6;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--text-3); font-size: 13px; }
+.controls {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin: 18px 0 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border);
+}
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button {
+  border: 0; background: none; padding: 6px 12px; font: inherit; font-size: 13px;
+  color: var(--text-2); cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--series); color: #fff; }
+.btn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.btn:disabled { opacity: .5; cursor: default; }
+.spacer { flex: 1; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .k { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+.tile .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tile .m { font-size: 12px; color: var(--text-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+/* Three stacked rows -- totals, per-day averages, shares -- each carrying the
+   same three measures, so a column reads down as one metric. */
+#tiles { grid-template-columns: 1fr; gap: 8px; }
+#tiles .tile { display: flex; align-items: center; gap: 16px; padding: 12px 16px; }
+#tiles .row-k { flex: 0 0 clamp(76px, 16%, 120px); font-size: 12px; color: var(--text-3);
+                text-transform: uppercase; letter-spacing: .05em; }
+#tiles .cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex: 1; }
+#tiles .cell .v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
+                  font-variant-numeric: tabular-nums; }
+#tiles .cell .m { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+.card h2 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+.card .note { font-size: 12px; color: var(--text-3); margin: 0 0 14px; }
+svg { display: block; width: 100%; overflow: visible; }
+.scroll { overflow-x: auto; }
+text { font: 11px ui-sans-serif, -apple-system, sans-serif; fill: var(--text-3); }
+text.val { fill: var(--text-2); font-variant-numeric: tabular-nums; }
+text.name { fill: var(--text); }
+.grid-line { stroke: var(--grid); stroke-width: 1; }
+.bar { fill: var(--series); }
+.hit { fill: transparent; cursor: pointer; }
+.hit:hover + .bar, .bar.on { fill: var(--s550); }
+#tip {
+  position: fixed; pointer-events: none; opacity: 0; transition: opacity .09s;
+  background: var(--text); color: var(--bg); padding: 6px 9px; border-radius: 7px;
+  font-size: 12px; line-height: 1.35; white-space: nowrap; z-index: 9; font-variant-numeric: tabular-nums;
+}
+.legend { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); margin-top: 10px; }
+.legend i { width: 16px; height: 10px; border-radius: 2px; display: block; }
+.empty { color: var(--text-3); font-size: 13px; padding: 8px 0; }
+.err { color: #e34948; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-3); font-weight: 500; font-size: 12px; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
+.chain { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; }
+.chain h3 { font-size: 12px; color: var(--text-3); font-weight: 500; margin: 0 0 8px;
+            text-transform: uppercase; letter-spacing: .05em; }
+.chain ol { list-style: none; margin: 0; padding: 0; }
+.chain li { display: flex; align-items: center; gap: 10px; padding: 5px 0;
+            border-bottom: 1px solid var(--border); font-size: 13px; }
+.chain li:last-child { border-bottom: 0; }
+.chain .n { margin-left: auto; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.chain .meter { height: 6px; border-radius: 3px; background: var(--series); flex: 0 0 auto; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Phone usage</h1>
+    <span class="sub" id="cov"></span>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="range" role="group" aria-label="Date range">
+      <button data-r="1">1d</button>
+      <button data-r="3">3d</button>
+      <button data-r="7">7d</button>
+      <button data-r="14" aria-pressed="true">14d</button>
+      <button data-r="30">30d</button>
+      <button data-r="90">90d</button>
+      <button data-r="all">All</button>
+    </div>
+    <label style="font-size:13px;color:var(--text-2);display:flex;gap:6px;align-items:center">
+      <input type="checkbox" id="system"> count system UI
+    </label>
+    <span class="spacer"></span>
+    <span class="sub" id="syncmsg"></span>
+    <button class="btn" id="sync">Sync phone</button>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Screen time per day</h2>
+    <p class="note">Foreground app time, reconstructed from the phone's activity events.</p>
+    <div id="c-daily"></div>
+  </div>
+
+  <div class="card">
+    <h2>Most used apps</h2>
+    <p class="note" id="apps-note"></p>
+    <div id="c-apps"></div>
+    <details id="exclude-panel" style="margin-top:16px">
+      <summary>Exclude apps from totals</summary>
+      <p class="note" style="margin:8px 0 10px">
+        Unticked apps are left out of every statistic — totals, the app list, the
+        day blocks, and the pickup and switch-chain analysis. Shared with your
+        other computer.
+      </p>
+      <div id="exclude-list" class="chain"></div>
+    </details>
+  </div>
+
+  <div class="card" id="appdetail-card" hidden>
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <h2 id="ad-title" style="margin:0"></h2>
+      <span class="sub" id="ad-pkg"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn" id="ad-close">Close</button>
+    </div>
+    <p class="note" id="ad-note" style="margin:6px 0 14px"></p>
+    <div class="tiles" id="ad-tiles" style="margin-bottom:14px"></div>
+    <div class="tiles" id="ad-rhythm" style="margin-bottom:20px"></div>
+    <h2 style="font-size:13px;margin:0 0 10px">Time per day</h2>
+    <div id="ad-daily"></div>
+    <h2 style="font-size:13px;margin:22px 0 10px">Times opened per day</h2>
+    <div id="ad-opens"></div>
+    <h2 style="font-size:13px;margin:22px 0 10px">Typical hours</h2>
+    <div id="ad-hours"></div>
+    <h2 style="font-size:13px;margin:22px 0 4px">What it connects to</h2>
+    <p class="note" style="margin:0 0 12px">
+      The app you were in immediately before and after, ignoring trips through
+      the home screen.
+    </p>
+    <div id="ad-chain" class="chain"></div>
+    <details style="margin-top:18px"><summary>Table view</summary>
+      <div id="ad-table" style="margin-top:12px"></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>Across the day</h2>
+    <p class="note">Average time on the phone in each part of the day.</p>
+    <div id="c-blocks"></div>
+    <h2 style="font-size:13px;margin:24px 0 10px">Hour by hour</h2>
+    <div id="c-hourprofile"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Table view</summary>
+      <div id="tbl" style="margin-top:12px"></div>
+    </details>
+  </div>
+</div>
+<div id="tip" role="status"></div>
+
+<script>
+const SVG = "http://www.w3.org/2000/svg";
+const tip = document.getElementById("tip");
+let state = { range: "14", system: false, data: null };
+
+const el = (n, a = {}, kids = []) => {
+  const e = document.createElementNS(SVG, n);
+  for (const [k, v] of Object.entries(a)) e.setAttribute(k, v);
+  for (const c of [].concat(kids)) e.append(c);
+  return e;
+};
+const fmt = ms => {
+  const m = Math.round(ms / 60000);
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+};
+const fmtShort = ms => {
+  const m = ms / 60000;
+  return m >= 60 ? `${(m / 60).toFixed(m / 60 >= 10 ? 0 : 1)}h` : `${Math.round(m)}m`;
+};
+const dayLabel = d => new Date(d + "T00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+
+function showTip(e, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - r.width - 8) + "px";
+  tip.style.top = Math.max(e.clientY - r.height - 10, 8) + "px";
+}
+const hideTip = () => (tip.style.opacity = 0);
+
+/* ---- daily bars: magnitude over time, one series, so no legend ---- */
+function drawDaily(host, daily) {
+  host.innerHTML = "";
+  if (!daily.length) return (host.innerHTML = '<p class="empty">No days yet — sync the phone.</p>');
+  const W = host.clientWidth || 900, H = 200, padL = 42, padB = 26, padT = 10;
+  const max = Math.max(1, ...daily.map(d => d.ms));
+  const step = (W - padL) / daily.length;
+  const bw = Math.max(3, Math.min(38, step - 6));
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H });
+
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const v = (max / ticks) * i;
+    svg.append(el("line", { class: "grid-line", x1: padL, x2: W, y1: y(v), y2: y(v) }));
+    svg.append(el("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end" },
+      [fmtShort(v)]));
+  }
+  daily.forEach((d, i) => {
+    const cx = padL + step * i + step / 2;
+    const h = Math.max(d.ms > 0 ? 2 : 0, H - padB - y(d.ms));
+    const g = el("g");
+    if (h) g.append(el("rect", { class: "bar", x: cx - bw / 2, y: y(d.ms), width: bw, height: h, rx: 4 }));
+    const hit = el("rect", { class: "hit", x: cx - step / 2, y: padT, width: step, height: H - padT - padB });
+    hit.addEventListener("mousemove", e => showTip(e,
+      `<b>${dayLabel(d.day)}</b><br>${fmt(d.ms)} screen time<br>${d.unlocks} unlocks · ${d.notifications} notifications`));
+    hit.addEventListener("mouseleave", hideTip);
+    g.append(hit);
+    svg.append(g);
+    const every = Math.ceil(daily.length / 14);
+    if (i % every === 0 || i === daily.length - 1)
+      svg.append(el("text", { x: cx, y: H - 8, "text-anchor": "middle" }, [dayLabel(d.day)]));
+  });
+  host.append(svg);
+}
+
+/* ---- top apps: horizontal bars, direct-labelled ---- */
+function drawApps(host, apps) {
+  host.innerHTML = "";
+  if (!apps.length) return (host.innerHTML = '<p class="empty">No app usage in this range.</p>');
+  const rowH = 30, W = host.clientWidth || 900, labelW = Math.min(190, W * 0.32), valW = 92;
+  const H = apps.length * rowH;
+  const max = Math.max(...apps.map(a => a.ms));
+  const barMax = W - labelW - valW;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H });
+  apps.forEach((a, i) => {
+    const yy = i * rowH;
+    const w = Math.max(2, (a.ms / max) * barMax);
+    svg.append(el("text", { class: "name", x: 0, y: yy + rowH / 2 + 4 },
+      [a.label.length > 26 ? a.label.slice(0, 25) + "…" : a.label]));
+    svg.append(el("rect", { class: "bar", x: labelW, y: yy + 7, width: w, height: rowH - 15, rx: 4 }));
+    svg.append(el("text", { class: "val", x: labelW + w + 8, y: yy + rowH / 2 + 4 }, [fmt(a.ms)]));
+    const hit = el("rect", { class: "hit", x: 0, y: yy, width: W, height: rowH });
+    hit.addEventListener("mousemove", e => showTip(e,
+      `<b>${a.label}</b><br>${fmt(a.ms)} · opened ${a.opens}×<br><span style="opacity:.7">click for day-by-day</span>`));
+    hit.addEventListener("mouseleave", hideTip);
+    hit.addEventListener("click", () => { state.scrollToApp = true; openApp(a.package); });
+    svg.append(hit);
+  });
+  host.append(svg);
+}
+
+/* ---- the day split into named blocks, plus the hour-by-hour shape ---- */
+function drawBlocks(host, blocks) {
+  host.innerHTML = "";
+  if (!blocks || !blocks.length) return;
+  const rowH = 34, W = host.clientWidth || 900;
+  const labelW = Math.min(210, W * 0.34), valW = 128;
+  const max = Math.max(...blocks.map(b => b.ms_per_day));
+  const barMax = W - labelW - valW;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${blocks.length * rowH}`, height: blocks.length * rowH });
+  blocks.forEach((b, i) => {
+    const yy = i * rowH, w = Math.max(2, (b.ms_per_day / max) * barMax);
+    svg.append(el("text", { class: "name", x: 0, y: yy + rowH / 2 + 1 }, [b.name]));
+    svg.append(el("text", { x: 0, y: yy + rowH / 2 + 13 }, [`${b.from}–${b.to}`]));
+    svg.append(el("rect", { class: "bar", x: labelW, y: yy + 8, width: w, height: rowH - 18, rx: 4 }));
+    svg.append(el("text", { class: "val", x: labelW + w + 8, y: yy + rowH / 2 + 4 },
+      [`${fmt(b.ms_per_day)} a day · ${b.share}%`]));
+    const hit = el("rect", { class: "hit", x: 0, y: yy, width: W, height: rowH });
+    hit.addEventListener("mousemove", e => showTip(e,
+      `<b>${b.name} ${b.from}–${b.to}</b><br>${fmt(b.ms_per_day)} a day<br>${fmt(b.ms)} in total · ${b.share}% of screen time`));
+    hit.addEventListener("mouseleave", hideTip);
+    svg.append(hit);
+  });
+  host.append(svg);
+}
+
+// Boundaries drawn on the hour chart so the blocks above stay legible in it.
+const BLOCK_EDGES = [7, 12, 17, 20, 22.5];
+
+function drawHourProfile(host, hourly, dayCount) {
+  host.innerHTML = "";
+  const by = new Map();
+  for (const r of hourly) by.set(r.hour, (by.get(r.hour) || 0) + r.ms);
+  const n = Math.max(1, dayCount);
+  const rows = Array.from({ length: 24 }, (_, h) => ({ hour: h, ms: (by.get(h) || 0) / n }));
+  const W = host.clientWidth || 900, H = 176, padL = 42, padB = 30, padT = 10;
+  const max = Math.max(1, ...rows.map(r => r.ms));
+  const step = (W - padL) / 24;
+  const bw = Math.max(4, step - 6);
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H });
+  for (let i = 0; i <= 3; i++) {
+    const v = (max / 3) * i;
+    svg.append(el("line", { class: "grid-line", x1: padL, x2: W, y1: y(v), y2: y(v) }));
+    svg.append(el("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end" }, [fmtShort(v)]));
+  }
+  for (const edge of BLOCK_EDGES) {
+    const x = padL + step * edge;
+    svg.append(el("line", { x1: x, x2: x, y1: padT, y2: H - padB,
+      stroke: "var(--border)", "stroke-width": 1, "stroke-dasharray": "3 3" }));
+  }
+  rows.forEach((r, i) => {
+    const cx = padL + step * i + step / 2;
+    const h = Math.max(r.ms > 0 ? 2 : 0, H - padB - y(r.ms));
+    if (h) svg.append(el("rect", { class: "bar", x: cx - bw / 2, y: y(r.ms), width: bw, height: h, rx: 3 }));
+    const hit = el("rect", { class: "hit", x: cx - step / 2, y: padT, width: step, height: H - padT - padB });
+    hit.addEventListener("mousemove", e => showTip(e,
+      `<b>${String(r.hour).padStart(2, "0")}:00</b><br>${fmt(r.ms)} a day on average`));
+    hit.addEventListener("mouseleave", hideTip);
+    svg.append(hit);
+    // every hour is labelled; at 24 labels the type drops a size to fit
+    svg.append(el("text", { x: cx, y: H - 8, "text-anchor": "middle", "font-size": "9.5" },
+      [r.hour === 0 ? "12a" : r.hour < 12 ? r.hour + "a" : r.hour === 12 ? "12p" : (r.hour - 12) + "p"]));
+  });
+  host.append(svg);
+}
+
+// Assumed waking hours in a day. Screen time as a share of this is more
+// meaningful than as a share of 24h, most of which is spent asleep.
+const WAKING_HOURS = 16;
+
+function drawTiles(d) {
+  const t = d.totals, days = d.daily, p = d.pickups || {}, q = d.pickup_quality || {};
+  const n = Math.max(1, t.active_days);
+  const perDay = t.ms / n;
+  const num = v => Math.round(v).toLocaleString();
+  const wakingPct = (perDay / (WAKING_HOURS * 3600000)) * 100;
+
+  const rows = [
+    ["Total", [
+      [fmt(t.ms), "screen time"],
+      [num(t.unlocks), "unlocks"],
+      [num(t.notifications), "notifications"],
+    ]],
+    ["A day", [
+      [fmt(perDay), "screen time"],
+      [num(t.unlocks / n), "unlocks"],
+      [num(t.notifications / n), "notifications"],
+    ]],
+    // The third row is a share rather than a count: each is a percentage of a
+    // different, meaningful denominator.
+    ["Share", [
+      [wakingPct.toFixed(1) + "%", `of a ${WAKING_HOURS}h waking day`],
+      [(q.pct_junk ?? 0) + "%", `unlocks under 30s · ${num(q.junk ?? 0)} of ${num(q.sessions ?? 0)}`],
+      [(p.unlocks ? Math.round(100 * p.self_initiated / p.unlocks) : 0) + "%",
+       `unlocks with no notification · ${num(p.self_initiated ?? 0)} of ${num(p.unlocks ?? 0)}`],
+    ]],
+  ];
+
+  document.getElementById("tiles").innerHTML = rows.map(([label, cells]) =>
+    `<div class="tile"><div class="row-k">${label}</div><div class="cells">` +
+    cells.map(([v, m]) => `<div class="cell"><div class="v">${v}</div><div class="m">${m}</div></div>`).join("") +
+    `</div></div>`).join("");
+}
+
+function drawTable(d) {
+  document.getElementById("tbl").innerHTML =
+    `<table><thead><tr><th>Day</th><th class="n">Screen time</th><th class="n">Apps</th>
+     <th class="n">Unlocks</th><th class="n">Notifications</th></tr></thead><tbody>` +
+    d.daily.slice().reverse().map(r => `<tr><td>${r.day}</td><td class="n">${fmt(r.ms)}</td>
+      <td class="n">${r.apps}</td><td class="n">${r.unlocks}</td><td class="n">${r.notifications}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
+/* ---- one app, in depth ---- */
+const fmtSec = ms => {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : fmt(ms);
+};
+
+function barChart(host, rows, opts) {
+  host.innerHTML = "";
+  if (!rows.length) return;
+  const W = host.clientWidth || 900, H = opts.height || 170, padL = 42, padB = 26, padT = 10;
+  const max = Math.max(1, ...rows.map(r => r.v));
+  const step = (W - padL) / rows.length;
+  const bw = Math.max(3, Math.min(38, step - 6));
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H });
+  for (let i = 0; i <= 4; i++) {
+    const v = (max / 4) * i;
+    svg.append(el("line", { class: "grid-line", x1: padL, x2: W, y1: y(v), y2: y(v) }));
+    svg.append(el("text", { x: padL - 8, y: y(v) + 4, "text-anchor": "end" },
+      [opts.unit === "count" ? String(Math.round(v)) : fmtShort(v)]));
+  }
+  rows.forEach((r, i) => {
+    const cx = padL + step * i + step / 2;
+    const h = Math.max(r.v > 0 ? 2 : 0, H - padB - y(r.v));
+    if (h) svg.append(el("rect", { class: "bar", x: cx - bw / 2, y: y(r.v), width: bw, height: h, rx: 4 }));
+    const hit = el("rect", { class: "hit", x: cx - step / 2, y: padT, width: step, height: H - padT - padB });
+    hit.addEventListener("mousemove", e => showTip(e, r.tip));
+    hit.addEventListener("mouseleave", hideTip);
+    svg.append(hit);
+    const every = Math.ceil(rows.length / 14);
+    if (i % every === 0 || i === rows.length - 1)
+      svg.append(el("text", { x: cx, y: H - 8, "text-anchor": "middle" }, [r.label]));
+  });
+  host.append(svg);
+}
+
+async function openApp(pkg) {
+  state.openPkg = pkg;
+  const r = await fetch(`/api/app/${encodeURIComponent(pkg)}?` +
+    new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" }));
+  const d = await r.json();
+  const t = d.totals;
+  const card = document.getElementById("appdetail-card");
+  card.hidden = false;
+  document.getElementById("ad-title").textContent = d.label;
+  document.getElementById("ad-pkg").textContent = d.package;
+  document.getElementById("ad-note").textContent =
+    `${state.data.start} → ${state.data.end} · used on ${t.active_days} of ${d.daily.length} days` +
+    (d.excluded ? " · excluded from screen time totals" : "");
+
+  const hr = h => h === null ? "—" : (h === 0 ? "12am" : h < 12 ? h + "am" : h === 12 ? "12pm" : (h - 12) + "pm");
+  document.getElementById("ad-tiles").innerHTML = [
+    ["Total time", fmt(t.ms), `${t.share_pct}% of all your screen time`],
+    ["Per active day", fmt(t.per_day_ms), `across ${t.active_days} days`],
+    ["Times opened", t.opens.toLocaleString(), `${Math.round(t.opens / Math.max(1, t.active_days))} a day`],
+    ["Typical visit", fmtSec(t.median_session_ms), `median · average ${fmtSec(t.avg_session_ms)}`],
+    ["Longest sitting", fmtSec(t.longest_ms), `busiest hour ${hr(t.busiest_hour)}`],
+    ["Notifications", t.notifications.toLocaleString(), `${Math.round(t.notifications / Math.max(1, t.active_days))} a day`],
+  ].map(([k, v, m]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="m">${m}</div></div>`).join("");
+
+  const w = d.weekday_split, bk = d.bookends;
+  document.getElementById("ad-rhythm").innerHTML = [
+    ["Weekdays", fmt(w.weekday.ms_per_day), `${w.weekday.opens_per_day} opens a day · ${w.weekday.days} days`],
+    ["Weekends", fmt(w.weekend.ms_per_day), `${w.weekend.opens_per_day} opens a day · ${w.weekend.days} days`],
+    ["First thing on waking", bk.first_pct + "%", `of ${bk.day_count} days it was the first app`],
+    ["Last thing before sleep", bk.last_pct + "%", `of ${bk.day_count} days it was the last app`],
+  ].map(([k, v, m]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="m">${m}</div></div>`).join("");
+
+  const chain = d.switch_chain;
+  const list = (rows, title, empty) => {
+    if (!rows.length) return `<div><h3>${title}</h3><p class="empty">${empty}</p></div>`;
+    const max = Math.max(...rows.map(r => r.count));
+    return `<div><h3>${title}</h3><ol>` + rows.map(r =>
+      `<li><span class="meter" style="width:${Math.max(6, (r.count / max) * 70)}px"></span>` +
+      `<span>${r.label}</span><span class="n">${r.count}</span></li>`).join("") + `</ol></div>`;
+  };
+  document.getElementById("ad-chain").innerHTML =
+    list(chain.into, `Arrives from · ${chain.into_total} switches`, "No app-to-app switches recorded.") +
+    list(chain.out, `Goes to · ${chain.out_total} switches`, "No app-to-app switches recorded.");
+
+  barChart(document.getElementById("ad-opens"), d.daily.map(x => ({
+    v: x.opens, label: dayLabel(x.day),
+    tip: `<b>${dayLabel(x.day)}</b><br>opened ${x.opens}×<br>${fmt(x.ms)} total`,
+  })), { height: 140, unit: "count" });
+
+  barChart(document.getElementById("ad-daily"), d.daily.map(x => ({
+    v: x.ms, label: dayLabel(x.day),
+    tip: `<b>${dayLabel(x.day)}</b><br>${fmt(x.ms)} · opened ${x.opens}×` +
+         (x.opens ? `<br>longest ${fmtSec(x.longest_ms)} · ${x.first}–${x.last}` : ""),
+  })), { height: 180 });
+
+  const byHour = new Map(d.hourly.map(h => [h.hour, h.ms]));
+  barChart(document.getElementById("ad-hours"),
+    Array.from({ length: 24 }, (_, h) => ({
+      v: byHour.get(h) || 0, label: h % 3 === 0 ? hr(h) : "",
+      tip: `<b>${hr(h)}</b><br>${fmt(byHour.get(h) || 0)} total`,
+    })), { height: 140 });
+
+  document.getElementById("ad-table").innerHTML =
+    `<table><thead><tr><th>Day</th><th class="n">Time</th><th class="n">Opens</th>
+     <th class="n">Longest</th><th>First</th><th>Last</th></tr></thead><tbody>` +
+    d.daily.slice().reverse().map(x => `<tr><td>${x.day}</td><td class="n">${fmt(x.ms)}</td>
+      <td class="n">${x.opens}</td><td class="n">${x.opens ? fmtSec(x.longest_ms) : "—"}</td>
+      <td>${x.first || "—"}</td><td>${x.last || "—"}</td></tr>`).join("") + `</tbody></table>`;
+
+  if (state.scrollToApp) { card.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  state.scrollToApp = false;
+}
+
+document.getElementById("ad-close").addEventListener("click", () => {
+  document.getElementById("appdetail-card").hidden = true;
+  state.openPkg = null;
+});
+
+// Each card renders independently: a failure in one used to abort render()
+// and leave the whole dashboard blank.
+function safe(name, fn) {
+  try { fn(); } catch (err) { console.error(`card "${name}" failed:`, err); }
+}
+
+/* ---- which apps count toward totals ---- */
+function renderExclude(choices, excluded) {
+  const host = document.getElementById("exclude-list");
+  const chosen = new Set(excluded || []);
+  host.innerHTML = (choices || []).map(a =>
+    `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px">
+       <input type="checkbox" data-pkg="${a.package}" ${chosen.has(a.package) ? "" : "checked"}>
+       <span>${a.label}</span>
+       <span class="n" style="margin-left:auto;color:var(--text-3)">${fmt(a.ms)}</span>
+     </label>`).join("");
+}
+
+document.getElementById("exclude-list").addEventListener("change", async e => {
+  const box = e.target.closest("input[type=checkbox][data-pkg]");
+  if (!box) return;
+  // unticked means "don't count this app"
+  const packages = [...document.querySelectorAll("#exclude-list input[data-pkg]")]
+    .filter(b => !b.checked).map(b => b.dataset.pkg);
+  box.disabled = true;
+  try {
+    const r = await fetch("/api/excluded", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packages }),
+    });
+    if (!(await r.json()).ok) throw new Error("save failed");
+    await load();
+    document.getElementById("exclude-panel").open = true;
+  } catch (err) {
+    console.error("exclusions:", err);
+    box.checked = !box.checked;
+  } finally {
+    box.disabled = false;
+  }
+});
+
+function render() {
+  const d = state.data;
+  if (!d) return;
+  const cov = d.coverage;
+  document.getElementById("cov").textContent = cov.days.length
+    ? `${d.start} → ${d.end} · ${cov.event_count.toLocaleString()} events from ${cov.sync_count} sync${cov.sync_count === 1 ? "" : "s"}`
+    : "no data yet";
+  document.getElementById("apps-note").textContent =
+    `Foreground time ${d.start} → ${d.end}. Click any app for its day-by-day detail.`;
+  safe("tiles", () => { drawTiles(d); });
+  safe("daily", () => { drawDaily(document.getElementById("c-daily"), d.daily); });
+  safe("apps", () => { drawApps(document.getElementById("c-apps"), d.apps); });
+  safe("exclude", () => { renderExclude(d.app_choices, d.excluded_apps); });
+  safe("blocks", () => { drawBlocks(document.getElementById("c-blocks"), d.day_blocks); });
+  safe("hours", () => { drawHourProfile(document.getElementById("c-hourprofile"), d.hourly, d.totals.active_days); });
+  safe("table", () => { drawTable(d); });
+  // WhatsApp dominates this phone's usage, so the drill-down opens on it rather
+  // than waiting for a click; any other app replaces it.
+  safe("app detail", () => openApp(state.openPkg || "com.whatsapp"));
+}
+
+async function load() {
+  const q = new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" });
+  const r = await fetch("/api/summary?" + q);
+  state.data = await r.json();
+  render();
+}
+
+document.getElementById("range").addEventListener("click", e => {
+  const b = e.target.closest("button[data-r]");
+  if (!b) return;
+  document.querySelectorAll("#range button").forEach(x => x.removeAttribute("aria-pressed"));
+  b.setAttribute("aria-pressed", "true");
+  state.range = b.dataset.r;
+  load();
+});
+document.getElementById("system").addEventListener("change", e => {
+  state.system = e.target.checked;
+  load();
+});
+document.getElementById("sync").addEventListener("click", async () => {
+  const btn = document.getElementById("sync"), msg = document.getElementById("syncmsg");
+  btn.disabled = true; msg.className = "sub"; msg.textContent = "pulling from phone…";
+  try {
+    const r = await fetch("/api/sync", { method: "POST" });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    msg.textContent = `${j.device}: +${j.events_added} new events`;
+    await load();
+  } catch (err) {
+    msg.className = "err"; msg.textContent = String(err.message || err);
+  } finally {
+    btn.disabled = false;
+  }
+});
+addEventListener("resize", () => render());
+load();
+</script>

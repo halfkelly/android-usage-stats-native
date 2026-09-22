@@ -1,0 +1,134 @@
+"""Human readable app names for package ids.
+
+Android keeps app labels inside each APK's resource table, which adb cannot
+read directly, so names are resolved in three steps: a curated table for the
+system and vendor packages that dominate a Samsung dump, an optional Play
+Store lookup for third-party apps, and a prettified package name as fallback.
+"""
+from __future__ import annotations
+
+import re
+
+# Packages a Samsung dump is full of, where the prettified id would be useless
+# or actively misleading ("Sec Android App Launcher").
+CURATED: dict[str, str] = {
+    "com.sec.android.app.launcher": "One UI Home",
+    "com.samsung.android.app.launcher": "One UI Home",
+    "com.android.systemui": "System UI",
+    "com.android.settings": "Settings",
+    "com.sec.android.app.clockpackage": "Clock",
+    "com.samsung.android.dialer": "Phone",
+    "com.samsung.android.incallui": "Phone (in call)",
+    "com.samsung.android.messaging": "Messages",
+    "com.samsung.android.app.contacts": "Contacts",
+    "com.sec.android.gallery3d": "Gallery",
+    "com.sec.android.app.camera": "Camera",
+    "com.samsung.android.calendar": "Calendar",
+    "com.samsung.android.app.notes": "Samsung Notes",
+    "com.samsung.android.scloud": "Samsung Cloud",
+    "com.samsung.android.forest": "Digital Wellbeing",
+    "com.samsung.android.honeyboard": "Samsung Keyboard",
+    "com.samsung.android.game.gamehome": "Game Launcher",
+    "com.sec.android.app.myfiles": "My Files",
+    "com.sec.android.app.sbrowser": "Samsung Internet",
+    "com.samsung.android.oneconnect": "SmartThings",
+    "com.samsung.android.spay": "Samsung Wallet",
+    "com.samsung.android.bixby.agent": "Bixby",
+    "com.samsung.android.app.aodservice": "Always On Display",
+    "com.samsung.android.smartswitchassistant": "Smart Switch",
+    "com.android.vending": "Play Store",
+    "com.google.android.gms": "Google Play services",
+    "com.google.android.googlequicksearchbox": "Google",
+    "com.google.android.apps.maps": "Google Maps",
+    "com.google.android.youtube": "YouTube",
+    "com.google.android.gm": "Gmail",
+    "com.google.android.apps.photos": "Google Photos",
+    "com.google.android.permissioncontroller": "Permission controller",
+    "com.google.android.apps.nbu.paisa.user": "Google Pay",
+    "com.android.chrome": "Chrome",
+    "com.whatsapp": "WhatsApp",
+    "org.telegram.messenger": "Telegram",
+    "org.mozilla.firefox": "Firefox",
+    "com.anthropic.claude": "Claude",
+    "com.instagram.android": "Instagram",
+    "com.spotify.music": "Spotify",
+    "com.truecaller": "Truecaller",
+    "in.swiggy.android": "Swiggy",
+    "com.zomato": "Zomato",
+    "net.one97.paytm": "Paytm",
+    "com.phonepe.app": "PhonePe",
+    "com.jio.myjio": "MyJio",
+    "in.amazon.mShop.android.shopping": "Amazon",
+    "com.mygate.user": "MyGate",
+    "com.bumble.app": "Bumble",
+    "com.ubercab": "Uber",
+    "com.flipkart.android": "Flipkart",
+}
+
+# Prefixes that carry no information once stripped.
+_NOISE = re.compile(
+    r"^(com|org|net|in|io|app)\.(android|google|samsung|sec|samsung\.android)?\.?", re.IGNORECASE
+)
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def prettify(package: str) -> str:
+    """`com.sec.android.app.dressroom` -> `Dressroom`."""
+    tail = package.split(".")[-1]
+    if tail in {"app", "android", "core", "service", "services", "main", "client"}:
+        parts = package.split(".")
+        tail = parts[-2] if len(parts) > 1 else tail
+    tail = _CAMEL.sub(" ", tail).replace("_", " ")
+    return " ".join(w.capitalize() if w.islower() else w for w in tail.split()) or package
+
+
+def resolve(packages: list[str], known: dict[str, str] | None = None,
+            fetch: bool = False, timeout: float = 5.0) -> dict[str, tuple[str, str]]:
+    """Return {package: (label, source)} for packages without a known label."""
+    known = known or {}
+    out: dict[str, tuple[str, str]] = {}
+    to_fetch: list[str] = []
+
+    for pkg in packages:
+        if pkg in known:
+            continue
+        if pkg in CURATED:
+            out[pkg] = (CURATED[pkg], "curated")
+        elif fetch:
+            to_fetch.append(pkg)
+        else:
+            out[pkg] = (prettify(pkg), "prettified")
+
+    for pkg in to_fetch:
+        title = _play_store_title(pkg, timeout)
+        out[pkg] = (title, "play") if title else (prettify(pkg), "prettified")
+    return out
+
+
+_TITLE = re.compile(r'<title[^>]*>([^<]+)</title>', re.IGNORECASE)
+
+
+def _play_store_title(package: str, timeout: float) -> str | None:
+    """Best-effort Play Store listing title. Returns None on any failure."""
+    try:
+        import requests
+    except ImportError:
+        return None
+    try:
+        resp = requests.get(
+            "https://play.google.com/store/apps/details",
+            params={"id": package, "hl": "en"},
+            timeout=timeout,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if resp.status_code != 200:
+            return None
+        m = _TITLE.search(resp.text)
+        if not m:
+            return None
+        title = m.group(1)
+        # Play titles look like "WhatsApp Messenger - Apps on Google Play"
+        title = re.sub(r"\s*[-–]\s*Apps on Google Play\s*$", "", title).strip()
+        return title or None
+    except Exception:
+        return None

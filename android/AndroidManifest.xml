@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.shrey.usagedump"
+    android:versionCode="1" android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <!-- Special access permission: granted from Settings > Usage data access,
+         or over adb with: appops set com.shrey.usagedump GET_USAGE_STATS allow
+         It reads Android's persisted usage buckets, the same store Digital
+         Wellbeing uses, which is deeper than what dumpsys usagestats prints. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+
+    <application android:label="Usage Dump" android:debuggable="true"
+                 android:allowBackup="false">
+        <activity android:name=".DumpActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -74,6 +74,20 @@ def require_device(serial: str | None = None) -> str:
         hint = " (accept the USB debugging prompt on the phone)" if state == "unauthorized" else ""
         raise AdbError(f"Device {s} is in state '{state}', not 'device'{hint}.")
     if len(ready) > 1:
+        # One phone on Wi-Fi can appear twice -- as ip:port and under its mDNS
+        # name -- so ask each entry which phone it is before calling it two.
+        by_phone: dict[str, list[str]] = {}
+        for candidate in ready:
+            try:
+                phone = shell("getprop ro.serialno", candidate, timeout=20).strip()
+            except AdbError:
+                phone = ""
+            by_phone.setdefault(phone or candidate, []).append(candidate)
+        if len(by_phone) == 1:
+            entries = next(iter(by_phone.values()))
+            # talk to the ip:port form; the mDNS name can change between sessions
+            ready = sorted(entries, key=lambda e: ("." not in e.split(":")[0], e))[:1]
+    if len(ready) > 1:
         raise AdbError(f"Multiple devices attached: {', '.join(ready)}. Pass --serial.")
     return ready[0]
 

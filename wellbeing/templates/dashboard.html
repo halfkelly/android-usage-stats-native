@@ -532,18 +532,33 @@ function renderExclude(choices, excluded) {
   // already sorted by time from the server; sort again so the panel never
   // depends on the API's ordering
   const rows = [...(choices || [])].sort((a, b) => b.ms - a.ms);
+  const sig = rows.map(a => a.package).join(",");
+  if (host.dataset.sig === sig) {
+    // Same apps as before: re-tick in place rather than rebuilding, so the
+    // list keeps its scroll position while you work down it.
+    host.querySelectorAll("input[data-pkg]").forEach(b => { b.checked = !chosen.has(b.dataset.pkg); });
+    return;
+  }
+  host.dataset.sig = sig;
   host.innerHTML = rows.map(a =>
     `<label><input type="checkbox" data-pkg="${a.package}" ${chosen.has(a.package) ? "" : "checked"}>
        <span>${a.label}</span><span class="n">${fmt(a.ms)}</span></label>`).join("");
 }
 
-document.getElementById("exclude-list").addEventListener("change", async e => {
-  const box = e.target.closest("input[type=checkbox][data-pkg]");
-  if (!box) return;
-  // unticked means "don't count this app"
-  const packages = [...document.querySelectorAll("#exclude-list input[data-pkg]")]
-    .filter(b => !b.checked).map(b => b.dataset.pkg);
-  box.disabled = true;
+let excludeSaveTimer = null;
+
+// Ticking several apps should be one save, not one reload per tick.
+document.getElementById("exclude-list").addEventListener("change", e => {
+  if (!e.target.closest("input[type=checkbox][data-pkg]")) return;
+  clearTimeout(excludeSaveTimer);
+  excludeSaveTimer = setTimeout(saveExclusions, 600);
+});
+
+async function saveExclusions() {
+  const list = document.getElementById("exclude-list");
+  const packages = [...list.querySelectorAll("input[data-pkg]")]
+    .filter(b => !b.checked).map(b => b.dataset.pkg);   // unticked = don't count
+  const pageY = window.scrollY, listY = list.scrollTop;
   try {
     const r = await fetch("/api/excluded", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -551,14 +566,14 @@ document.getElementById("exclude-list").addEventListener("change", async e => {
     });
     if (!(await r.json()).ok) throw new Error("save failed");
     await load();
-    document.getElementById("exclude-panel").open = true;
   } catch (err) {
     console.error("exclusions:", err);
-    box.checked = !box.checked;
-  } finally {
-    box.disabled = false;
+    await load();            // fall back to whatever the server actually has
   }
-});
+  document.getElementById("exclude-panel").open = true;
+  list.scrollTop = listY;
+  window.scrollTo(0, pageY);
+}
 
 function render() {
   const d = state.data;

@@ -13,6 +13,9 @@ echo "  Phone Usage — sync"
 echo "  ------------------"
 echo ""
 
+# A phone already on Wi-Fi needs no cable; harmless when there isn't one.
+"$PY" -m wellbeing connect >/dev/null 2>&1 || true
+
 if "$ADB" devices 2>/dev/null | grep -q "no permissions"; then
   echo "  ✗ The phone is connected, but adb isn't allowed to talk to it."
   echo ""
@@ -25,8 +28,12 @@ fi
 if ! "$ADB" devices 2>/dev/null | grep -qw device; then
   echo "  ✗ I can't see your phone."
   echo ""
-  echo "    1. Plug it in and unlock the screen"
-  echo "    2. Tap Allow if asked about USB debugging"
+  echo "    Over Wi-Fi (no cable): turn on Settings > Developer options >"
+  echo "    Wireless debugging, then run this again. First time on this"
+  echo "    computer, pair once:"
+  echo "        .venv/bin/python -m wellbeing pair <ip:port> <code>"
+  echo ""
+  echo "    Or by cable: plug it in, unlock the screen, and tap Allow if asked."
   if grep -qi microsoft /proc/version 2>/dev/null; then
     echo ""
     echo "    On WSL the phone must be attached to Linux first, from"

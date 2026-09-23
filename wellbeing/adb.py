@@ -63,6 +63,12 @@ def require_device(serial: str | None = None) -> str:
                 return s
         raise AdbError(f"Device {serial} not attached.")
     ready = [s for s, state in devs if state == "device"]
+    # A phone on Wi-Fi has a host:port serial. When both a cable and a wireless
+    # connection are present, prefer the wireless one so a forgotten cable does
+    # not turn every sync into an ambiguous-device error.
+    wireless = [s for s in ready if ":" in s]
+    if wireless:
+        ready = wireless
     if not ready:
         s, state = devs[0]
         hint = " (accept the USB debugging prompt on the phone)" if state == "unauthorized" else ""
@@ -70,6 +76,39 @@ def require_device(serial: str | None = None) -> str:
     if len(ready) > 1:
         raise AdbError(f"Multiple devices attached: {', '.join(ready)}. Pass --serial.")
     return ready[0]
+
+
+MDNS_CONNECT = "_adb-tls-connect._tcp"
+MDNS_PAIR = "_adb-tls-pairing._tcp"
+
+
+def mdns_services(service: str = MDNS_CONNECT) -> list[str]:
+    """host:port for each phone advertising wireless debugging on this network."""
+    try:
+        out = _run(["mdns", "services"], timeout=15)
+    except AdbError:
+        return []
+    found = []
+    for line in out.splitlines():
+        if service in line:
+            address = line.split()[-1].strip()
+            if ":" in address:
+                found.append(address)
+    return found
+
+
+def connect(address: str) -> str:
+    out = _run(["connect", address], timeout=30)
+    if "cannot connect" in out.lower() or "failed" in out.lower():
+        raise AdbError(out.strip())
+    return out.strip()
+
+
+def pair(address: str, code: str) -> str:
+    out = _run(["pair", address, code], timeout=60)
+    if "successfully" not in out.lower():
+        raise AdbError(out.strip())
+    return out.strip()
 
 
 def shell(command: str, serial: str | None = None, timeout: int = 180) -> str:

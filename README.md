@@ -208,6 +208,34 @@ If `sync.sh` reports *no permissions*, run
 **Only one machine should sync at a time.** Both write the same archive, and
 Drive resolves simultaneous edits by leaving conflict copies.
 
+### Syncing over Wi-Fi
+
+The phone does not need a cable. Android's wireless debugging works for everything
+here, and on the Windows machine it avoids usbipd, the admin PowerShell and the
+`sudo` prompt entirely.
+
+On the phone: **Settings → Developer options → Wireless debugging**, switch it on.
+
+Once per computer, tap *Pair device with pairing code* and use the address and code
+it shows:
+
+```bash
+.venv/bin/python -m wellbeing pair 192.168.1.50:41234 123456
+```
+
+After that, `sync.sh` (and `phonesync` on Windows) finds the phone by itself — it
+looks for it on the network before falling back to USB. To attach it by hand:
+
+```bash
+.venv/bin/python -m wellbeing connect            # finds it on the network
+.venv/bin/python -m wellbeing connect 192.168.1.50:37017
+```
+
+The connect port changes when the phone reboots or wireless debugging restarts;
+discovery handles that, and the Wireless debugging screen shows the current one.
+Both devices must be on the same network, and this is debugging access over that
+network — fine at home, not on public Wi-Fi.
+
 ### Leaving apps out of screen time
 
 Open **Exclude apps from totals** under "Most used apps" and untick any app. It

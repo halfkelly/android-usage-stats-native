@@ -51,6 +51,44 @@ def cmd_devices(args) -> int:
     return 0
 
 
+def cmd_connect(args) -> int:
+    """Attach the phone over Wi-Fi, finding it on the network if not told where."""
+    existing = [s for s, state in adb.devices() if state == "device" and ":" in s]
+    if existing and not args.address:
+        print(f"already connected to {existing[0]}")
+        return 0
+
+    addresses = [args.address] if args.address else adb.mdns_services()
+    if not addresses:
+        print("Couldn't find the phone on this network.\n"
+              "  On the phone: Settings > Developer options > Wireless debugging, switch it on.\n"
+              "  If this is a new computer, pair it once:\n"
+              "      python -m wellbeing pair <ip:port shown under 'Pair device with pairing code'> <code>\n"
+              "  Then pass the address from the Wireless debugging screen:\n"
+              "      python -m wellbeing connect <ip:port>", file=sys.stderr)
+        return 1
+
+    for address in addresses:
+        try:
+            print(adb.connect(address))
+            return 0
+        except adb.AdbError as exc:
+            print(f"  {address}: {exc}", file=sys.stderr)
+    print("Couldn't connect. If the phone rebooted, the port changes — check the "
+          "Wireless debugging screen.", file=sys.stderr)
+    return 1
+
+
+def cmd_pair(args) -> int:
+    try:
+        print(adb.pair(args.address, args.code))
+    except adb.AdbError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print("paired. Now run: python -m wellbeing connect")
+    return 0
+
+
 def cmd_sync(args) -> int:
     conn = db.connect(args.db)
     try:
@@ -207,6 +245,15 @@ def main(argv=None) -> int:
     sp = sub.add_parser("devices", help="list attached devices")
     sp.set_defaults(func=cmd_devices)
 
+    sp = sub.add_parser("connect", help="attach the phone over Wi-Fi")
+    sp.add_argument("address", nargs="?", help="ip:port from the Wireless debugging screen")
+    sp.set_defaults(func=cmd_connect)
+
+    sp = sub.add_parser("pair", help="pair this computer with the phone, once")
+    sp.add_argument("address", help="ip:port shown under 'Pair device with pairing code'")
+    sp.add_argument("code", help="the 6-digit pairing code")
+    sp.set_defaults(func=cmd_pair)
+
     sp = sub.add_parser("sync", help="pull usage stats from the phone into the database")
     sp.add_argument("--serial", help="device serial, when more than one is attached")
     sp.add_argument("--fetch-labels", action="store_true",
@@ -262,7 +309,7 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     # Everything that turns instants into days or hours must agree on a zone,
     # so pin it before the command runs. These three never do date arithmetic.
-    if args.cmd not in ("devices", "where", "set-timezone"):
+    if args.cmd not in ("devices", "where", "set-timezone", "connect", "pair"):
         try:
             archive_mod.pin_timezone()
         except archive_mod.TimezoneError as exc:

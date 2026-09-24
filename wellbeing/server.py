@@ -6,7 +6,8 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
 
-from . import adb, archive, db, stats, sync as sync_mod
+from . import (adb, appdump, archive, db, export as export_mod, stats,
+               sync as sync_mod)
 
 RANGES = {"1": 1, "3": 3, "7": 7, "14": 14, "30": 30, "90": 90}
 
@@ -96,12 +97,32 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
 
     @app.post("/api/sync")
     def do_sync():
+        """Pull from the phone and write the shared archive.
+
+        The button used to stop at the database, which left the newest data on
+        this machine only -- invisible to the other computer and lost with the
+        database. It now reaches as far back as the companion app allows and
+        exports, exactly like sync.sh.
+        """
         c = conn()
+        serial = (request.json or {}).get("serial") if request.is_json else None
         try:
-            result = sync_mod.sync(c, request.json.get("serial") if request.is_json else None)
+            serial = adb.require_device(serial)
+            sync_mod.backup_db(c)
+            try:
+                result = appdump.ingest_files(c, appdump.capture(serial))
+            except (adb.AdbError, FileNotFoundError, OSError):
+                result = sync_mod.sync(c, serial)      # fall back to the 24h path
+            cov = stats.coverage(c)
+            written = export_mod.export_all(c, cov["days"][0], cov["days"][-1])
         except adb.AdbError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 409
-        return jsonify({"ok": True, **result})
+        return jsonify({
+            "ok": True,
+            "events_added": result.get("events_added", 0),
+            "days": len(cov["days"]),
+            "archive_rows_added": sum(added for _total, added in written.values()),
+        })
 
     @app.get("/api/devices")
     def devices():

@@ -42,6 +42,11 @@ h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
 }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed="true"] { background: var(--series); color: #fff; }
+.range-dates { display: inline-flex; align-items: center; gap: 6px; }
+.range-dates input { font: inherit; cursor: pointer; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; }
+.range-dates input.on { border-color: var(--series); color: var(--series); }
+.range-dates .to { font-size: 13px; color: var(--text-3); }
 .btn {
   border: 1px solid var(--border); background: var(--surface); color: var(--text);
   border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
@@ -125,6 +130,11 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
       <button data-r="90">90d</button>
       <button data-r="all">All</button>
     </div>
+    <span class="range-dates">
+      <input type="date" id="from" aria-label="From date">
+      <span class="to">to</span>
+      <input type="date" id="to-date" aria-label="To date">
+    </span>
     <label style="font-size:13px;color:var(--text-2);display:flex;gap:6px;align-items:center">
       <input type="checkbox" id="system"> count system UI
     </label>
@@ -203,7 +213,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 <script>
 const SVG = "http://www.w3.org/2000/svg";
 const tip = document.getElementById("tip");
-let state = { range: "14", system: false, data: null };
+let state = { range: "14", system: false, data: null, start: null, end: null };
 
 const el = (n, a = {}, kids = []) => {
   const e = document.createElementNS(SVG, n);
@@ -255,8 +265,11 @@ function drawDaily(host, daily) {
     if (h) g.append(el("rect", { class: "bar", x: cx - bw / 2, y: y(d.ms), width: bw, height: h, rx: 4 }));
     const hit = el("rect", { class: "hit", x: cx - step / 2, y: padT, width: step, height: H - padT - padB });
     hit.addEventListener("mousemove", e => showTip(e,
-      `<b>${dayLabel(d.day)}</b><br>${fmt(d.ms)} screen time<br>${d.unlocks} unlocks · ${d.notifications} notifications`));
+      `<b>${dayLabel(d.day)}</b><br>${fmt(d.ms)} screen time<br>${d.unlocks} unlocks · ${d.notifications} notifications` +
+      `<br><span style="opacity:.65">click for this day alone</span>`));
     hit.addEventListener("mouseleave", hideTip);
+    hit.style.cursor = "pointer";
+    hit.addEventListener("click", () => { hideTip(); showOneDay(d.day); });
     g.append(hit);
     svg.append(g);
     const every = Math.ceil(daily.length / 14);
@@ -443,8 +456,9 @@ function barChart(host, rows, opts) {
 
 async function openApp(pkg) {
   state.openPkg = pkg;
-  const r = await fetch(`/api/app/${encodeURIComponent(pkg)}?` +
-    new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" }));
+  const r = await fetch(`/api/app/${encodeURIComponent(pkg)}?` + (state.start && state.end
+    ? new URLSearchParams({ start: state.start, end: state.end, system: state.system ? "1" : "0" })
+    : new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" })));
   const d = await r.json();
   const t = d.totals;
   const card = document.getElementById("appdetail-card");
@@ -584,6 +598,16 @@ function render() {
     : "no data yet";
   document.getElementById("apps-note").textContent =
     `Foreground time ${d.start} → ${d.end}. Click any app for its day-by-day detail.`;
+  safe("dates", () => {
+    const days = d.coverage.days;
+    for (const el of [fromEl, toEl]) {
+      if (days.length) { el.min = days[0]; el.max = days[days.length - 1]; }
+      el.classList.toggle("on", Boolean(state.start && state.end));
+    }
+    // follow whatever is on screen, but never fight a picker being typed into
+    if (document.activeElement !== fromEl) fromEl.value = d.start;
+    if (document.activeElement !== toEl) toEl.value = d.end;
+  });
   safe("tiles", () => { drawTiles(d); });
   safe("daily", () => { drawDaily(document.getElementById("c-daily"), d.daily); });
   safe("apps", () => { drawApps(document.getElementById("c-apps"), d.apps); });
@@ -597,7 +621,9 @@ function render() {
 }
 
 async function load() {
-  const q = new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" });
+  const q = state.start && state.end
+    ? new URLSearchParams({ start: state.start, end: state.end, system: state.system ? "1" : "0" })
+    : new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" });
   const r = await fetch("/api/summary?" + q);
   state.data = await r.json();
   render();
@@ -609,8 +635,32 @@ document.getElementById("range").addEventListener("click", e => {
   document.querySelectorAll("#range button").forEach(x => x.removeAttribute("aria-pressed"));
   b.setAttribute("aria-pressed", "true");
   state.range = b.dataset.r;
+  state.start = state.end = null;   // a preset drops out of a custom range
   load();
 });
+const fromEl = document.getElementById("from"), toEl = document.getElementById("to-date");
+
+function applyDates() {
+  if (!fromEl.value || !toEl.value) return;
+  // tolerate the two being picked the other way round
+  const [a, b] = [fromEl.value, toEl.value].sort();
+  state.start = a; state.end = b;
+  document.querySelectorAll("#range button").forEach(x => x.removeAttribute("aria-pressed"));
+  load();
+}
+for (const el of [fromEl, toEl]) {
+  el.addEventListener("change", applyDates);
+  // open the calendar from anywhere in the field, not just the small icon
+  el.addEventListener("click", () => { try { el.showPicker(); } catch (_) {} });
+}
+
+function showOneDay(day) {
+  state.start = state.end = day;
+  fromEl.value = toEl.value = day;
+  document.querySelectorAll("#range button").forEach(x => x.removeAttribute("aria-pressed"));
+  load();
+}
+
 document.getElementById("system").addEventListener("change", e => {
   state.system = e.target.checked;
   load();
@@ -622,7 +672,7 @@ document.getElementById("sync").addEventListener("click", async () => {
     const r = await fetch("/api/sync", { method: "POST" });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
-    msg.textContent = `${j.device}: +${j.events_added} new events`;
+    msg.textContent = `+${j.events_added} events · ${j.days} days · archive +${j.archive_rows_added} rows`;
     await load();
   } catch (err) {
     msg.className = "err"; msg.textContent = String(err.message || err);

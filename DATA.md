@@ -189,6 +189,40 @@ reasonable proxy for video and gaming.
 
 ---
 
+### `garmin_daily.csv`
+**What did my body do that day?** — from the Garmin watch, one row per calendar day.
+
+Fetched from Garmin Connect's cloud, not the phone. Joins to every other file on
+`day`. Only days the watch actually recorded appear — a day with no row means the
+watch was not worn or did not exist yet, which is different from a row of zeros.
+
+| Column | Meaning |
+|---|---|
+| `day` | Local calendar date |
+| `steps`, `distance_m`, `floors_up` | Movement |
+| `calories`, `active_calories` | Total and activity-only |
+| `resting_hr`, `min_hr`, `max_hr` | Heart rate |
+| `avg_stress`, `max_stress` | Garmin's stress score, 0-100 |
+| `body_battery_wake`, `body_battery_high`, `body_battery_low` | Body Battery, 0-100 |
+| `intensity_minutes` | Moderate + 2x vigorous, Garmin's own weighting |
+| `active_ms`, `highly_active_ms`, `sedentary_ms` | How the day was spent |
+| `avg_spo2`, `avg_respiration` | Blood oxygen, breaths per minute |
+| `sleep_ms` | Time asleep |
+| `deep_sleep_ms`, `light_sleep_ms`, `rem_sleep_ms`, `awake_ms` | The stages |
+| `awake_count` | Times woken |
+| `sleep_start_at`, `sleep_end_at` | Absolute timestamps -- use these to join against sessions |
+| `sleep_start`, `sleep_end` | The same, as local clock labels |
+| `sleep_score`, `sleep_stress` | Garmin's own scores |
+
+**A night is filed under the date you woke up.** The night of the 20th appears as
+`2026-09-21`, and its `sleep_start_at` falls on the 20th. Pair a bedtime with the
+*previous* day's phone use.
+
+**Use `sleep_start_at`/`sleep_end_at`, not `first_use`/`last_use`, to ask when
+someone stopped using their phone.** `last_use` in `device_daily.csv` is clipped
+at midnight, so a session running past midnight reports `00:00` and a real 03:36
+bedtime looks like 23:08 the evening before.
+
 ## The backstop
 
 ### `events/events-YYYY-MM.csv`
@@ -273,6 +307,7 @@ older `dumpsys` path have it. Use `opens` in `app_daily.csv` instead.
 | Phone use by hour | `hourly.csv` |
 | Screen-on independent of apps | `device_counters.csv` |
 | Orientation, dark mode | `device_configs.csv` |
+| Body, sleep, steps | `garmin_daily.csv` |
 | Anything else | `events/` |
 
 `daily.csv` and `device_daily.csv` genuinely overlap on daily totals. The split

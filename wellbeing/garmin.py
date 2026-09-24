@@ -127,8 +127,13 @@ def fetch(days: int = 28, end: date | None = None) -> list[dict]:
             "body_battery_wake": summary.body_battery_at_wake_time,
             "body_battery_high": summary.body_battery_highest_value,
             "body_battery_low": summary.body_battery_lowest_value,
-            "intensity_minutes": (summary.moderate_intensity_minutes or 0)
-                                 + 2 * (summary.vigorous_intensity_minutes or 0),
+            # Garmin's own weighting: vigorous minutes count double. Stays None
+            # when neither was measured -- blank means "not measured" in the
+            # archive, and 0 would claim the watch was worn and saw no movement.
+            "intensity_minutes": None if summary.moderate_intensity_minutes is None
+                                 and summary.vigorous_intensity_minutes is None
+                                 else (summary.moderate_intensity_minutes or 0)
+                                      + 2 * (summary.vigorous_intensity_minutes or 0),
             "active_ms": _s2ms(summary.active_seconds),
             "highly_active_ms": _s2ms(summary.highly_active_seconds),
             "sedentary_ms": _s2ms(summary.sedentary_seconds),
@@ -164,7 +169,10 @@ def fetch(days: int = 28, end: date | None = None) -> list[dict]:
             "sleep_stress": d.avg_sleep_stress,
         })
 
-    return [rows[k] for k in sorted(rows)]
+    # Days before the watch existed come back as a full set of Nones. An empty
+    # row would archive a claim that the day was measured and was blank.
+    return [rows[k] for k in sorted(rows)
+            if any(v is not None and v != "" for f, v in rows[k].items() if f != "day")]
 
 
 FIELDS = [

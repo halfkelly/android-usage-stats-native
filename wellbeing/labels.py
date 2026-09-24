@@ -63,6 +63,81 @@ CURATED: dict[str, str] = {
     "com.bumble.app": "Bumble",
     "com.ubercab": "Uber",
     "com.flipkart.android": "Flipkart",
+
+    # Messaging and calls
+    "org.thoughtcrime.securesms": "Signal",
+    "com.whatsapp.w4b": "WhatsApp Business",
+    "com.facebook.orca": "Messenger",
+    "us.zoom.videomeetings": "Zoom",
+
+    # Streaming and media
+    "com.amazon.avod.thirdpartyclient": "Prime Video",
+    "com.amazon.mp3": "Amazon Music",
+    "com.sonyliv": "SonyLIV",
+    "com.timesprime.timesprimeandroid": "Times Prime",
+    "com.samsung.android.video": "Video player",
+    "com.deniscerri.ytdl": "YTDLnis",
+    "com.hitrolab.audioeditor": "AudioLab",
+
+    # Getting around, and getting things delivered
+    "ee.mtakso.client": "Bolt",
+    "com.grabtaxi.passenger": "Grab",
+    "com.application.zomato": "Zomato",
+    "com.application.zomato.district": "District by Zomato",
+    "com.zeptoconsumerapp": "Zepto",
+    "app.mycountrydelight.in.countrydelight": "Country Delight",
+    "com.company.pronto": "Pronto",
+    "com.delhiveryConsigneeApp": "Delhivery",
+    "com.urbanclap.urbanclap": "Urban Company",
+
+    # Shopping
+    "com.ril.ajio": "AJIO",
+    "com.lenskart.app": "Lenskart",
+    "com.furlenco.android": "Furlenco",
+    "com.cars24.seller": "CARS24",
+
+    # Money, bills and insurance
+    "com.idfcfirstbank.optimus": "IDFC FIRST Bank",
+    "com.zerodha.kite3": "Kite by Zerodha",
+    "com.sbi.authenticator": "SBI Secure",
+    "com.acko.android": "Acko",
+    "com.myairtelapp": "Airtel Thanks",
+    "com.Splitwise.SplitwiseMobile": "Splitwise",
+
+    # Health and fitness
+    "com.garmin.android.apps.connectmobile": "Garmin Connect",
+    "com.garmin.connectiq": "Connect IQ",
+    "com.fitbit.FitbitMobile": "Fitbit",
+    "com.github.jamesgay.fitnotes": "FitNotes",
+    "com.aranoah.healthkart.plus": "1mg",
+    "com.clove.patient": "Clove Dental",
+
+    # Work and documents
+    "com.trello": "Trello",
+    "com.adobe.reader": "Adobe Acrobat",
+    "com.google.android.apps.docs": "Google Drive",
+    "com.google.android.apps.docs.editors.sheets": "Google Sheets",
+    "com.google.android.calendar": "Google Calendar",
+    "com.google.android.apps.translate": "Google Translate",
+    "com.google.android.apps.subscriptions.red": "Google One",
+    "com.google.android.apps.nbu.files": "Files by Google",
+
+    # System surfaces that show up as "apps" in usage stats
+    "android": "Android system",
+    "com.android.intentresolver": "Share sheet",
+    "com.android.companiondevicemanager": "Device pairing",
+    "com.android.settings.intelligence": "Settings search",
+    "com.google.android.captiveportallogin": "Wi-Fi sign-in",
+    "com.google.android.photopicker": "Photo picker",
+    "com.google.android.documentsui": "File picker",
+    "com.samsung.android.app.telephonyui": "Phone (call UI)",
+    "com.sec.android.app.voicenote": "Voice Recorder",
+    "com.sec.android.app.popupcalculator": "Calculator",
+    "com.samsung.android.lool": "Device Care",
+    "com.osp.app.signin": "Samsung account",
+    "com.samsung.android.easysetup": "Smart View",
+    "com.samsung.android.app.dressroom": "Wallpapers and style",
+    "com.digibites.accubattery": "AccuBattery",
 }
 
 # Prefixes that carry no information once stripped.
@@ -90,10 +165,13 @@ def resolve(packages: list[str], known: dict[str, str] | None = None,
     to_fetch: list[str] = []
 
     for pkg in packages:
-        if pkg in known:
-            continue
+        # A curated name always wins, even over a label already stored, so
+        # adding an entry here fixes every database on the next sync.
         if pkg in CURATED:
-            out[pkg] = (CURATED[pkg], "curated")
+            if known.get(pkg) != CURATED[pkg]:
+                out[pkg] = (CURATED[pkg], "curated")
+        elif pkg in known:
+            continue
         elif fetch:
             to_fetch.append(pkg)
         else:

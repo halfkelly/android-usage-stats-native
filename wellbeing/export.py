@@ -127,6 +127,42 @@ def _archive_events(conn, out_dir: Path) -> tuple[int, int]:
     return total, added
 
 
+def _relabel(out_dir: Path, labels: dict[str, str]) -> int:
+    """Rewrite the display-name column of every archived file from `labels`.
+
+    The `app` column is cosmetic -- `package` is the identity -- so it must not
+    be governed by the fuller-reading rule in `_merge`, which would otherwise
+    freeze a name onto any row the current export does not supersede, including
+    days older than the database. Renaming an app here renames it everywhere.
+    """
+    changed = 0
+    for name in ("app_daily.csv", "app_hourly.csv", "app_buckets.csv"):
+        path = out_dir / name
+        if not path.exists():
+            continue
+        with path.open(newline="") as fh:
+            reader = csv.DictReader(fh)
+            fields, rows = reader.fieldnames or [], list(reader)
+        if "app" not in fields or "package" not in fields:
+            continue
+        hits = 0
+        for row in rows:
+            want = labels.get(row.get("package", ""))
+            if want and row.get("app") != want:
+                row["app"] = want
+                hits += 1
+        if not hits:
+            continue
+        tmp = path.with_suffix(".csv.tmp")
+        with tmp.open("w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+        tmp.replace(path)
+        changed += hits
+    return changed
+
+
 def export_all(conn: sqlite3.Connection, start: str, end: str,
                out_dir: Path | None = None, include_chrome: bool = False) -> dict[str, tuple[int, int]]:
     out_dir = Path(out_dir) if out_dir else archive.archive_dir(create=True)
@@ -236,5 +272,7 @@ def export_all(conn: sqlite3.Connection, start: str, end: str,
 
     # --- raw events, monthly partitions ------------------------------------
     written["events/*.csv"] = _archive_events(conn, out_dir)
+
+    _relabel(out_dir, labels)
 
     return written

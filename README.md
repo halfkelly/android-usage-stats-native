@@ -120,18 +120,22 @@ days the phone has already forgotten.
 its settings, right-click `PhoneUsageBackup` → **Available offline**, so reads
 from WSL don't stall waiting on downloads.
 
-**2. Get the code.** This folder is not a git repo; its code is bundled at
-`My Drive/PhoneUsageCode/adb_usage_stats.zip`. Unpack it into the *Linux* home
-directory, not under `/mnt/c` -- the database must not live on the Windows
-filesystem, and the scripts need their executable bit:
+**2. Get the code**, by cloning `github.com/Shrey97/adb-usage-stats` (private).
+Clone into the *Linux* home directory, not under `/mnt/c` -- the database must
+not live on the Windows filesystem, and the scripts need their executable bit:
 
 ```bash
-sudo apt update && sudo apt install -y python3-venv python3-pip unzip curl wslu
-cp "/mnt/g/My Drive/PhoneUsageCode/adb_usage_stats.zip" ~/   # adjust path, see step 3
-cd ~ && unzip adb_usage_stats.zip && cd adb_usage_stats
+sudo apt update && sudo apt install -y python3-venv python3-pip git curl wslu
+git clone git@github.com:Shrey97/adb-usage-stats.git ~/adb_usage_stats
+cd ~/adb_usage_stats
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-chmod +x sync.sh dashboard.sh
+chmod +x sync.sh dashboard.sh autosync.sh
 ```
+
+The zip at `My Drive/PhoneUsageCode/adb_usage_stats.zip` still exists and is
+still refreshed on every export, but it is the fallback for a machine with no
+GitHub access, not the intended route. `wellbeing where` compares the local code
+against it either way.
 
 **3. Check the archive is found:**
 

@@ -205,8 +205,23 @@ The companion app is already on the phone, so WSL needs no Java or Android SDK.
 If `sync.sh` reports *no permissions*, run
 `./platform-tools/adb kill-server && sudo ./platform-tools/adb start-server` once.
 
-**Only one machine should sync at a time.** Both write the same archive, and
-Drive resolves simultaneous edits by leaving conflict copies.
+**Both machines may be scheduled, but stagger them.** `autosync.sh` takes a
+`sync.lock` in the shared archive and skips if another host's lock is under 900s
+old, which handles the ordinary case. It is not a real mutex: the lock lives in
+Drive, and Drive propagates asynchronously, so a lock written on one machine can
+be invisible on the other for a while. Two syncs landing inside that window write
+the same CSVs at once and Drive keeps both as conflict copies.
+
+Nothing is destroyed when that happens -- the merge is append-only and cell-safe,
+and the phone is the same source either way -- but one machine's additions can end
+up in a `... (1).csv` instead of the canonical file, and someone has to notice.
+
+So give the two schedules different hours: the Mac runs at 00/06/12/18, so set the
+Windows machine to 03/09/15/21. With staggered schedules and the lock, a collision
+needs a manual sync to land exactly on top of a scheduled one.
+
+(Day-partitioning the archive -- see the backlog -- removes most of this surface,
+because a finished day's file is never rewritten again.)
 
 ### Syncing over Wi-Fi
 

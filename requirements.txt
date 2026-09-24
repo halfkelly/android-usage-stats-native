@@ -1,3 +1,7 @@
 flask>=3.0
 requests>=2.31
-garth>=0.8
+# Pinned: 0.7+ signs in through sso.garmin.com/mobile/api/login, which Garmin
+# now answers with 429 for anything that is not the real Garmin app. 0.6.3 uses
+# the web SSO flow (/sso/embed + /sso/signin) that connect.garmin.com itself
+# uses, and that still answers us. See wellbeing/garmin.py.
+garth==0.6.3

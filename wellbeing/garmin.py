@@ -5,9 +5,13 @@ Garmin's servers -- and the Garmin Connect app keeps its FIT cache in private
 storage that adb cannot read without root. So the only wireless route to this
 data is Garmin's own API, reached with the `garth` library.
 
-Two things to know about that library. It is deprecated, because Garmin changed
-their auth flow and broke the mobile user-agent it signs in with; overriding the
-user-agent with a browser string still works, which is what `login` does below.
+Two things to know about that library. It is deprecated and pinned to 0.6.3:
+from 0.7 it signs in through `sso.garmin.com/mobile/api/login`, which Garmin now
+answers with a flat 429 for anything that is not the real Garmin app. 0.6.3 uses
+the web SSO flow -- `/sso/embed` and `/sso/signin`, exactly what a browser at
+connect.garmin.com goes through -- and that still answers, provided the
+user-agent is a browser rather than garth's `GCM-iOS-...` default, which `login`
+below takes care of. Verified 2026-09-24: web endpoints 200, mobile API 429.
 And it is unofficial, so it can stop working whenever Garmin decides. Neither is
 a reason not to use it -- the data is the user's own and there is no sanctioned
 API for it -- but it is a reason to keep the archive append-only, exactly like

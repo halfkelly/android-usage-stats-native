@@ -220,6 +220,14 @@ def cmd_garmin_login(args) -> int:
     """Interactive sign-in. The password is typed here and never stored."""
     import getpass
     from . import garmin
+    # Needs a real terminal: the password prompt and the MFA prompt both read
+    # from the tty, and a piped or captured stdin would echo the password into
+    # whatever is doing the capturing.
+    if not sys.stdin.isatty():
+        print("garmin-login needs an interactive terminal.\n"
+              "Open Terminal, cd to this project, and run:\n"
+              "    .venv/bin/python -m wellbeing garmin-login")
+        return 1
     email = args.email or input("Garmin email: ").strip()
     password = getpass.getpass("Garmin password (not echoed, not stored): ")
 

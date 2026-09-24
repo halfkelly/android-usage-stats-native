@@ -163,6 +163,20 @@ def _relabel(out_dir: Path, labels: dict[str, str]) -> int:
     return changed
 
 
+def export_garmin(conn: sqlite3.Connection, out_dir: Path | None = None) -> tuple[int, int]:
+    """Archive the Garmin daily rows beside the phone ones, keyed on the same day.
+
+    Garmin's API is unofficial and already broke once, so this follows the same
+    append-only rule as everything else: a day that has been fetched survives,
+    whatever happens to the API later.
+    """
+    from . import garmin
+    out_dir = Path(out_dir) if out_dir else archive.archive_dir(create=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return _merge(out_dir / "garmin_daily.csv", garmin.FIELDS,
+                  garmin.daily(conn), key=("day",), richer="steps")
+
+
 def export_all(conn: sqlite3.Connection, start: str, end: str,
                out_dir: Path | None = None, include_chrome: bool = False) -> dict[str, tuple[int, int]]:
     out_dir = Path(out_dir) if out_dir else archive.archive_dir(create=True)

@@ -216,6 +216,42 @@ def cmd_set_timezone(args) -> int:
     return 0
 
 
+def cmd_garmin_login(args) -> int:
+    """Interactive sign-in. The password is typed here and never stored."""
+    import getpass
+    from . import garmin
+    email = args.email or input("Garmin email: ").strip()
+    password = getpass.getpass("Garmin password (not echoed, not stored): ")
+
+    def prompt_mfa():
+        return input("Garmin sent a code. Enter it: ").strip()
+
+    try:
+        where = garmin.login(email, password, prompt_mfa=prompt_mfa)
+    except garmin.GarminError as exc:
+        print(exc)
+        return 1
+    print(f"Signed in. Tokens saved to {where} (this machine only, not Drive).")
+    return 0
+
+
+def cmd_garmin(args) -> int:
+    from . import garmin
+    conn = db.connect(args.db)
+    try:
+        rows = garmin.fetch(days=args.days)
+    except garmin.GarminError as exc:
+        print(exc)
+        return 1
+    garmin.ingest(conn, rows)
+    got = [r["day"] for r in rows]
+    print(f"{len(rows)} days from Garmin: {got[0] if got else '-'} .. {got[-1] if got else '-'}")
+    if not args.no_export:
+        n, added = export_mod.export_garmin(conn)
+        print(f"  garmin_daily.csv   {n} rows total  (+{added} new)")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import create_app
     app = create_app(args.db)
@@ -296,6 +332,16 @@ def main(argv=None) -> int:
     sp = sub.add_parser("set-timezone", help="record the archive's timezone (one time)")
     sp.add_argument("zone", help="IANA name, e.g. Asia/Kolkata")
     sp.set_defaults(func=cmd_set_timezone)
+
+    sp = sub.add_parser("garmin-login", help="sign in to Garmin Connect, once per machine")
+    sp.add_argument("--email", help="skip the email prompt")
+    sp.set_defaults(func=cmd_garmin_login)
+
+    sp = sub.add_parser("garmin", help="pull daily health data from Garmin Connect")
+    sp.add_argument("--days", type=int, default=28, help="how far back to fetch (default 28)")
+    sp.add_argument("--db", default=str(db.DEFAULT_DB))
+    sp.add_argument("--no-export", action="store_true", help="database only, skip the archive")
+    sp.set_defaults(func=cmd_garmin)
 
     sp = sub.add_parser("serve", help="run the dashboard")
     sp.add_argument("--host", default="127.0.0.1")

@@ -92,6 +92,41 @@ CREATE TABLE IF NOT EXISTS apps (
     updated_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS garmin_daily (
+    day TEXT PRIMARY KEY,
+    steps INTEGER,
+    distance_m INTEGER,
+    floors_up INTEGER,
+    calories INTEGER,
+    active_calories INTEGER,
+    resting_hr INTEGER,
+    min_hr INTEGER,
+    max_hr INTEGER,
+    avg_stress REAL,
+    max_stress INTEGER,
+    body_battery_wake INTEGER,
+    body_battery_high INTEGER,
+    body_battery_low INTEGER,
+    intensity_minutes INTEGER,
+    active_ms INTEGER,
+    highly_active_ms INTEGER,
+    sedentary_ms INTEGER,
+    avg_spo2 REAL,
+    avg_respiration REAL,
+    sleep_ms INTEGER,
+    deep_sleep_ms INTEGER,
+    light_sleep_ms INTEGER,
+    rem_sleep_ms INTEGER,
+    awake_ms INTEGER,
+    awake_count INTEGER,
+    sleep_start_at INTEGER,
+    sleep_end_at INTEGER,
+    sleep_start TEXT,
+    sleep_end TEXT,
+    sleep_score INTEGER,
+    sleep_stress INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS syncs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     ts_ms        INTEGER NOT NULL,

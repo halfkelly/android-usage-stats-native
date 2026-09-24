@@ -128,6 +128,14 @@ Two ways to schedule it, and the choice matters:
   "run whether user is logged on or not", and with "start only if a network
   connection is available". This starts WSL itself if it is not running.
 
+**Schedule it at 03:00/09:00/15:00/21:00.** The Mac runs at 00/06/12/18, and the
+two must not coincide. `sync.lock` in the archive is not a real mutex -- it lives
+in Drive and Drive propagates asynchronously, so a lock written on one machine
+can be invisible on the other for a while. Staggering is what actually keeps them
+apart; the lock is the backstop for a manual sync landing on a scheduled one. A
+collision does not lose data (the merge is append-only and cell-safe) but leaves
+Drive conflict copies that someone has to notice. See README, "Two computers".
+
 Prefer Task Scheduler. Whichever you pick, prove it works unattended before
 calling it done: trigger the task manually, confirm a fresh row appears in the
 archive, then wait for one scheduled firing and confirm it fired on its own.

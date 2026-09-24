@@ -1,7 +1,7 @@
 """Local Flask dashboard. Binds to localhost only -- this is personal data."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
@@ -33,7 +33,13 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
         start, end = request.args.get("start"), request.args.get("end")
         if start and end:
             return start, end
-        span = request.args.get("range", "14")
+        span = request.args.get("range", "today")
+        # "today" means the calendar day in the archive's timezone, not the last
+        # day that happens to hold data -- a day with nothing in it yet is a true
+        # answer, and says the phone has not synced.
+        if span in ("today", "yesterday"):
+            day = str(date.today() - timedelta(days=1 if span == "yesterday" else 0))
+            return day, day
         if span == "all" and days_avail:
             return days_avail[0], days_avail[-1]
         return stats.default_range(c, RANGES.get(span, 14))

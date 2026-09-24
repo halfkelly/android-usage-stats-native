@@ -122,13 +122,8 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 
   <div class="controls">
     <div class="seg" id="range" role="group" aria-label="Date range">
-      <button data-r="1">1d</button>
-      <button data-r="3">3d</button>
-      <button data-r="7">7d</button>
-      <button data-r="14" aria-pressed="true">14d</button>
-      <button data-r="30">30d</button>
-      <button data-r="90">90d</button>
-      <button data-r="all">All</button>
+      <button data-r="today" aria-pressed="true">Today</button>
+      <button data-r="yesterday">Yesterday</button>
     </div>
     <span class="range-dates">
       <input type="date" id="from" aria-label="From date">
@@ -213,7 +208,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 <script>
 const SVG = "http://www.w3.org/2000/svg";
 const tip = document.getElementById("tip");
-let state = { range: "14", system: false, data: null, start: null, end: null };
+let state = { range: "today", system: false, data: null, start: null, end: null };
 
 const el = (n, a = {}, kids = []) => {
   const e = document.createElementNS(SVG, n);

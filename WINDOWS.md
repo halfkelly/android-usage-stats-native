@@ -85,9 +85,35 @@ first and make sure nothing local is worth saving, and confirm `.gitignore`
 already covers `data/` and `.venv/` so the reset does not delete them.
 Afterwards `python -m wellbeing where` should report the code matches Drive.
 
-### 2. Remove the broken `/etc/fstab` line
-A line `G: /mnt/g drvfs` was added and errors on every WSL start. Remove it. WSL
-already mounts Windows drives automatically, so nothing is lost. Needs sudo.
+### 2. Fix how the archive is reached — do NOT just delete the fstab line
+Earlier guidance said to remove the `G: /mnt/g drvfs` line because it errors on
+every WSL start. That was wrong, and deleting it would break task 6.
+
+The line errors because `G:` does not exist yet: it is a virtual drive published
+by Google Drive for Desktop, and WSL's automount only sees drives present when
+WSL starts. Delete the line and `/mnt/g` never mounts at all, so an unattended
+sync at 03:00 has nowhere to write.
+
+The real problem underneath: **an unattended sync cannot depend on `G:`.** It only
+exists while Drive for Desktop is running, which means while someone is logged in.
+
+Two ways out, and the second is better:
+
+- **Keep streaming (`G:`) and make the mount lazy.** Add `nofail` to the fstab
+  line so boot stops erroring, and have the sync mount on demand. Mounting needs
+  sudo, so this also drags in a sudoers rule. Works, but fragile, and still dead
+  whenever nobody is logged in.
+- **Switch this machine's Drive to Mirror instead of Stream** (Drive for Desktop
+  → Settings → Google Drive → *Mirror files*). Mirrored files live on the local
+  disk, typically `C:\Users\shrey\My Drive\`, and are **present whether or not
+  Drive is running** — Drive uploads them the next time it runs. Then point
+  `PHONE_USAGE_ARCHIVE` at `/mnt/c/Users/shrey/My Drive/PhoneUsageBackup`, drop
+  the fstab line entirely, and the sync never needs a mount, a drive letter or
+  sudo. The archive is ~10 MB, so the local copy costs nothing.
+
+Prefer Mirror. Then update `PHONE_USAGE_ARCHIVE` in `~/.bashrc:119` and confirm
+with `wellbeing where`. Note `/mnt/c` is fine for the *archive* (it is just CSVs
+Drive also holds); it is the **database** that must stay on the Linux filesystem.
 
 ### 3. Decide whether USB passthrough is still worth fixing
 `phonesync` finds and attaches the phone but adb then reports it "not seen";
@@ -103,12 +129,14 @@ screen).
 A udev rule for the phone's vendor id fixes this. Only relevant if task 3 ends up
 using USB; wireless adb does not need it.
 
-### 5. Recover the other session's timezone edits
-Another Claude Code session on this machine made timezone-related changes that
-never reached Drive or git. Its transcript is under `~/.claude/projects/` in WSL.
-An extraction script was written but never run. Check whether those edits are
-already superseded by what is now in `main` before reapplying anything — the
-timezone handling has been rewritten since.
+### 5. ~~Recover the other session's timezone edits~~ — STRUCK 2026-09-24
+There is nothing to recover. Checked on the machine: `~/.claude/projects/` holds
+only the current session, no `-home-shrey-adb-usage-stats` directory ever
+existed, `history.jsonl` starts at the current session, and no extraction script
+exists on disk or anywhere in the repo's history. `~/.claude.json` still carries
+an `/home/shrey/adb_usage_stats` entry, so a session did run there once, but its
+artifacts are gone. Moot anyway: the timezone handling has been rewritten since,
+and `archive.json` is now the single source of that value.
 
 ### 6. Schedule unattended sync — the headline requirement
 The Mac runs `autosync.sh` from a launchd agent every 6h and at login. This

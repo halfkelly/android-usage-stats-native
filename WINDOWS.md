@@ -17,6 +17,29 @@ and each keep their own derived SQLite database.
   got its copy, and what task 1 replaces
 - Read `DATA.md` for the archive format and `README.md` for setup
 
+## The goal, in one line
+
+**Make this machine do everything the Mac does, unattended.** Same code, same
+archive, same timezone, same dashboard, syncing on a schedule without anyone
+being at the keyboard. When you are done, the two machines should be
+interchangeable: sync from either, view the dashboard on either.
+
+### Parity checklist — what "same as the Mac" means
+
+| | Mac today | This machine |
+|---|---|---|
+| Code | git clone of `main`, matches the Drive bundle | task 1 |
+| Archive | `PhoneUsageBackup/` in Google Drive | should already work; verify |
+| Timezone | `Asia/Kolkata`, pinned from `archive.json` | verify — this machine's clock is UTC |
+| Excluded apps | 5 packages in `archive.json` | automatic, shared through Drive |
+| Phone over Wi-Fi | paired, `wellbeing connect` works | task 3 — pairing is **per computer** |
+| Unattended sync | launchd, every 6h + at login | task 6 |
+| Dashboard | `localhost:5000` | works once tasks 1 and 2 are done |
+| Garmin | working, tokens Mac-only | **not here** — see "Not your problem" |
+
+Verify parity at the end with `.venv/bin/python -m wellbeing where` on both: the
+archive path, the timezone and the code digest should match.
+
 ## Read this before running anything
 
 **1. Do not run `export` or `sync` here until task 1 is done.** This machine's
@@ -87,13 +110,31 @@ An extraction script was written but never run. Check whether those edits are
 already superseded by what is now in `main` before reapplying anything — the
 timezone handling has been rewritten since.
 
-### 6. Schedule unattended sync
+### 6. Schedule unattended sync — the headline requirement
 The Mac runs `autosync.sh` from a launchd agent every 6h and at login. This
-machine has no equivalent. Either a Windows Task Scheduler entry or a cron in WSL
-calling the same `autosync.sh`. It is already safe to run both machines: the
-script takes a lock file in the Drive archive (`sync.lock`) and skips if another
-host's lock is under 900s old. It also exits quietly when the phone is not
-reachable, so a laptop off the house Wi-Fi costs nothing.
+machine needs the same. `autosync.sh` is already in the repo and already
+cross-machine safe: it takes `sync.lock` in the Drive archive and skips if
+another host's lock is under 900s old, and it exits quietly when the phone is
+not reachable, so being off the house Wi-Fi costs nothing.
+
+Two ways to schedule it, and the choice matters:
+- **cron inside WSL** is simpler, but only runs while a WSL instance is alive.
+  WSL shuts down when the last shell closes, so a laptop that is never opened to
+  a terminal never syncs. If you take this route you also need WSL to stay
+  resident (`wsl.exe --exec dbus-launch true` on login, or a Task Scheduler entry
+  that starts WSL at boot).
+- **Windows Task Scheduler calling into WSL** is the reliable one:
+  `wsl.exe -d Ubuntu -- bash -lc '~/adb_usage_stats/autosync.sh'`, every 6 hours,
+  "run whether user is logged on or not", and with "start only if a network
+  connection is available". This starts WSL itself if it is not running.
+
+Prefer Task Scheduler. Whichever you pick, prove it works unattended before
+calling it done: trigger the task manually, confirm a fresh row appears in the
+archive, then wait for one scheduled firing and confirm it fired on its own.
+
+**Check the log, not just the exit code.** `autosync.sh` is deliberately quiet;
+a run that skipped because the phone was unreachable and a run that synced look
+similar from outside. Confirm the archive's newest day actually advanced.
 
 ## Not your problem
 

@@ -29,7 +29,7 @@ interchangeable: sync from either, view the dashboard on either.
 | | Mac today | This machine |
 |---|---|---|
 | Code | git clone of `main`, matches the Drive bundle | task 1 |
-| Archive | `PhoneUsageBackup/` in Google Drive | should already work; verify |
+| Archive | `PhoneUsageBackup/` in Google Drive | works via `G:`; mark it Available offline |
 | Timezone | `Asia/Kolkata`, pinned from `archive.json` | verify — this machine's clock is UTC |
 | Excluded apps | 5 packages in `archive.json` | automatic, shared through Drive |
 | Phone over Wi-Fi | paired, `wellbeing connect` works | task 3 — pairing is **per computer** |
@@ -85,35 +85,37 @@ first and make sure nothing local is worth saving, and confirm `.gitignore`
 already covers `data/` and `.venv/` so the reset does not delete them.
 Afterwards `python -m wellbeing where` should report the code matches Drive.
 
-### 2. Fix how the archive is reached — do NOT just delete the fstab line
-Earlier guidance said to remove the `G: /mnt/g drvfs` line because it errors on
-every WSL start. That was wrong, and deleting it would break task 6.
+### 2. Reach the archive without mirroring all of Drive
+Two earlier versions of this task were wrong. First it said to delete the
+`G: /mnt/g drvfs` fstab line — that would leave `/mnt/g` never mounted and break
+task 6. Then it said to switch Drive for Desktop to **Mirror** — which would
+work, but My Drive holds ~279 top-level items of unrelated personal files, and
+mirroring downloads every one of them to this laptop to reach a 10 MB archive.
+Not worth it.
 
-The line errors because `G:` does not exist yet: it is a virtual drive published
-by Google Drive for Desktop, and WSL's automount only sees drives present when
-WSL starts. Delete the line and `/mnt/g` never mounts at all, so an unattended
-sync at 03:00 has nowhere to write.
+**Keep streaming, and schedule the sync to run only while logged on.** The
+objection to `G:` was that it exists only while Drive for Desktop is running,
+i.e. while someone is logged in. But a sync also needs the *phone* reachable on
+the same Wi-Fi with wireless debugging on, which is only true when the owner is
+around — which is when they are logged in. The logged-out case Mirror was
+protecting against is one where the sync would fail at the phone anyway.
 
-The real problem underneath: **an unattended sync cannot depend on `G:`.** It only
-exists while Drive for Desktop is running, which means while someone is logged in.
+So:
+- **Leave `PHONE_USAGE_ARCHIVE` pointing at `/mnt/g/My Drive/PhoneUsageBackup`.**
+  It already resolves and `wellbeing where` already reports `Asia/Kolkata`.
+- **Keep the fstab line, but add `nofail`** so a WSL start before `G:` exists
+  stops erroring instead of failing the boot.
+- In Drive for Desktop on Windows, right-click **`PhoneUsageBackup` → Available
+  offline**. This caches just that folder locally while everything else stays
+  streamed, so reads from WSL do not stall on downloads. The Mac does the same.
+- In task 6, set the Task Scheduler job to **"Run only when the user is logged
+  on"**, and tick **"Run task as soon as possible after a scheduled start is
+  missed"** so a laptop that was asleep at 03:00 still syncs when it wakes.
 
-Two ways out, and the second is better:
-
-- **Keep streaming (`G:`) and make the mount lazy.** Add `nofail` to the fstab
-  line so boot stops erroring, and have the sync mount on demand. Mounting needs
-  sudo, so this also drags in a sudoers rule. Works, but fragile, and still dead
-  whenever nobody is logged in.
-- **Switch this machine's Drive to Mirror instead of Stream** (Drive for Desktop
-  → Settings → Google Drive → *Mirror files*). Mirrored files live on the local
-  disk, typically `C:\Users\shrey\My Drive\`, and are **present whether or not
-  Drive is running** — Drive uploads them the next time it runs. Then point
-  `PHONE_USAGE_ARCHIVE` at `/mnt/c/Users/shrey/My Drive/PhoneUsageBackup`, drop
-  the fstab line entirely, and the sync never needs a mount, a drive letter or
-  sudo. The archive is ~10 MB, so the local copy costs nothing.
-
-Prefer Mirror. Then update `PHONE_USAGE_ARCHIVE` in `~/.bashrc:119` and confirm
-with `wellbeing where`. Note `/mnt/c` is fine for the *archive* (it is just CSVs
-Drive also holds); it is the **database** that must stay on the Linux filesystem.
+If the archive is ever unreachable when the job fires, nothing is damaged:
+`wellbeing` pins the timezone from `archive.json` before any command that does
+date arithmetic and exits 2 if it cannot read it, rather than falling back to
+this machine's UTC clock.
 
 ### 3. Decide whether USB passthrough is still worth fixing
 `phonesync` finds and attaches the phone but adb then reports it "not seen";

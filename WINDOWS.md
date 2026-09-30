@@ -17,6 +17,31 @@ and each keep their own derived SQLite database.
   got its copy, and what task 1 replaces
 - Read `DATA.md` for the archive format and `README.md` for setup
 
+## Incident, 2026-09-30 — read before syncing again
+
+The first export from this machine corrupted 292 rows of the shared archive. It
+is repaired, and both causes are fixed in `main`, but **this machine must
+`git pull` before its next scheduled run** or it will do it again.
+
+What happened: this machine's database had a seven-day hole, because it synced
+after the phone had already pruned 14-21 Sept. `stats.py` paired a screen-on at
+09-14 17:02 with the next screen-off it could find at 09-21 18:36 and split that
+span across midnights, giving six days 86,400,000 ms of screen-on -- exactly 24h,
+with screen_on == idle == unlocked and zero app foreground. The archive merge
+then let those rows win, because it picked a winner by comparing one column and
+0 is not blank. Six good days of `device_daily.csv` were overwritten with zeros,
+along with regressions in five other files.
+
+Two fixes: an unclosed event pair is now dropped rather than attributed, and the
+merge is cell-wise and never lets a number decrease. Sixteen tests cover both.
+
+**Also rebuild this machine's database.** It still has the hole, so its own
+dashboard is wrong for 14-21 Sept even though the archive is now right:
+
+    .venv/bin/python -m wellbeing import
+
+That rebuilds `data/usage.db` from the archive's `events/`, which is complete.
+
 ## Status — 2026-09-30
 
 | Task | State |

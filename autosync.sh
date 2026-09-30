@@ -47,8 +47,16 @@ fi
 echo "$ME" > "$LOCK"
 trap 'rm -f "$LOCK"' EXIT
 
+# Pull down whatever the other machine has already archived, before deciding
+# whether this one can reach the phone. Syncing and viewing are separate jobs:
+# the dashboard reads the local database, so a laptop that never sees the phone
+# would otherwise sit on stale numbers forever while the archive moved on.
+# Costs a couple of seconds and is a no-op when nothing is new.
+IMPORTED=$("$PY" -m wellbeing import 2>&1 | grep -oE "[0-9,]+ events \([0-9,]+ new\)" | head -1)
+[ -n "$IMPORTED" ] && echo "$(stamp) archive -> local db: $IMPORTED"
+
 if ! "$PY" -m wellbeing connect >/dev/null 2>&1; then
-  echo "$(stamp) phone not on this network; skipping"; exit 0
+  echo "$(stamp) phone not on this network; dashboard is current, skipping sync"; exit 0
 fi
 
 echo "$(stamp) syncing from $ME"

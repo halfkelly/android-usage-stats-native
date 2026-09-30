@@ -462,7 +462,7 @@ INTERACTION_EVENT = "USER_INTERACTION"
 # is dropped rather than clamped: under-counting a gap is honest, inventing a
 # day of screen time is not.
 MAX_SCREEN_PAIR_MS = 12 * 60 * 60 * 1000       # no phone is interactive for 12h straight
-MAX_SERVICE_PAIR_MS = 36 * 60 * 60 * 1000      # music and navigation legitimately run long
+MAX_SERVICE_PAIR_MS = 24 * 60 * 60 * 1000      # music and navigation legitimately run long
 
 
 def _paired_ms_per_day(conn, start_type: str, stop_type: str, start: str, end: str,
@@ -489,6 +489,16 @@ def _paired_ms_per_day(conn, start_type: str, stop_type: str, start: str, end: s
             a, b = open_at.pop(key), r["ts_ms"]
             if b - a > max_pair_ms:
                 continue                       # stop event lost; do not invent the gap
+            # A pair may touch at most two calendar days. This is what actually
+            # stops a day being handed a full 86,400,000 ms: for a day to be
+            # credited with all 24 hours it has to sit *entirely inside* the
+            # pair, which takes a third day. The magnitude cap above is not
+            # enough on its own -- a 34h foreground-service pair is under a 36h
+            # ceiling and still swallows a whole day, which is how Amazon Music
+            # came to show 24h of playback on days the app was never opened.
+            if (datetime.fromtimestamp(b / 1000).date()
+                    - datetime.fromtimestamp(a / 1000).date()).days > 1:
+                continue
             # split across midnight so each day gets only its own share
             while a < b:
                 d = datetime.fromtimestamp(a / 1000).date()

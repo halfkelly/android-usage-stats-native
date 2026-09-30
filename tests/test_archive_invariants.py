@@ -139,3 +139,69 @@ def test_a_session_crossing_midnight_is_split():
     out = stats._paired_ms_per_day(conn, stats.SCREEN_ON, stats.SCREEN_OFF_EV,
                                   "2026-09-15", "2026-09-16")
     assert out == {"2026-09-15": 3_600_000, "2026-09-16": 3_600_000}
+
+
+# --- the two capture paths must not double-count -----------------------------
+
+class _Ev:
+    def __init__(self, ts_ms, type, package, klass="", instance_id=""):
+        self.ts_ms, self.type, self.package = ts_ms, type, package
+        self.klass, self.instance_id = klass, instance_id
+
+
+def _events_db():
+    from wellbeing import db as dbmod
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.executescript(dbmod.SCHEMA)
+    return c
+
+
+def test_the_same_event_from_both_sources_is_stored_once():
+    """dumpsys reports whole seconds, the companion app milliseconds.
+
+    The same unlock arrives as 1789823111000 and 1789823111107 -- different
+    primary keys, so INSERT OR IGNORE keeps both and every COUNT(*) doubles.
+    """
+    from wellbeing import db as dbmod
+    c = _events_db()
+    dbmod.insert_events(c, [_Ev(1789823111107, "KEYGUARD_HIDDEN", "android")])
+    dbmod.insert_events(c, [_Ev(1789823111000, "KEYGUARD_HIDDEN", "android", instance_id="7")])
+    n = c.execute("SELECT COUNT(*) FROM events WHERE type='KEYGUARD_HIDDEN'").fetchone()[0]
+    assert n == 1, f"the same unlock is stored {n} times"
+    kept = c.execute("SELECT ts_ms FROM events").fetchone()[0]
+    assert kept == 1789823111107, "the millisecond-precise copy should be the survivor"
+
+
+def test_a_second_aligned_event_with_no_twin_is_kept():
+    """About one real event in a thousand lands on a second boundary by chance."""
+    from wellbeing import db as dbmod
+    c = _events_db()
+    dbmod.insert_events(c, [_Ev(1789823111000, "KEYGUARD_HIDDEN", "android")])
+    assert c.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+
+
+# --- a pair may never swallow a whole day ------------------------------------
+
+def test_a_pair_spanning_three_days_is_rejected():
+    """The foreground-service case: under the magnitude cap, still absurd.
+
+    A 34h music session is below the 36h ceiling the first fix used, but it
+    still contains one whole calendar day -- which is how Amazon Music came to
+    show 24h of playback on days the app was never opened.
+    """
+    conn = _conn([(_ms(14, 20), stats.FS_START), (_ms(16, 6), stats.FS_STOP)])
+    out = stats._paired_ms_per_day(conn, stats.FS_START, stats.FS_STOP,
+                                  "2026-09-14", "2026-09-16",
+                                  max_pair_ms=stats.MAX_SERVICE_PAIR_MS)
+    assert 86_400_000 not in out.values(), f"a day was handed all 24 hours: {out}"
+    assert out == {}, f"a pair spanning three days should be dropped, got {out}"
+
+
+def test_an_overnight_service_still_counts():
+    """Music from 22:00 to 07:00 crosses one midnight and is perfectly real."""
+    conn = _conn([(_ms(14, 22), stats.FS_START), (_ms(15, 7), stats.FS_STOP)])
+    out = stats._paired_ms_per_day(conn, stats.FS_START, stats.FS_STOP,
+                                  "2026-09-14", "2026-09-15",
+                                  max_pair_ms=stats.MAX_SERVICE_PAIR_MS)
+    assert out == {"2026-09-14": 2 * 3_600_000, "2026-09-15": 7 * 3_600_000}

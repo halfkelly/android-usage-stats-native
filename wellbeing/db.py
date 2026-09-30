@@ -169,12 +169,45 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 def insert_events(conn: sqlite3.Connection, events) -> int:
     before = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+    rows = [(e.ts_ms, e.type, e.package, e.klass, e.instance_id) for e in events]
     conn.executemany(
         "INSERT OR IGNORE INTO events (ts_ms, type, package, class, instance_id)"
         " VALUES (?, ?, ?, ?, ?)",
-        [(e.ts_ms, e.type, e.package, e.klass, e.instance_id) for e in events],
+        rows,
     )
+    if rows:
+        _drop_duplicate_sources(conn, min(r[0] for r in rows), max(r[0] for r in rows))
     return conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] - before
+
+
+def _drop_duplicate_sources(conn: sqlite3.Connection, lo: int, hi: int) -> int:
+    """Remove the same real event stored twice by the two capture paths.
+
+    `dumpsys` prints wall-clock times truncated to the second; the companion app
+    reports exact milliseconds. The primary key includes ts_ms, so one press of
+    the power button lands as two rows and every COUNT(*) metric -- unlocks,
+    notifications, interactions -- doubles wherever the two paths cover the same
+    window. `sync.sh` runs `deep-sync || sync`, so any deep-sync failure quietly
+    does exactly that. It happened on 2026-09-23: 92 unlocks stored against 56
+    real, 407 notifications against 255.
+
+    A second-aligned row is dropped only when a millisecond-precise row of the
+    same type and package exists inside that second -- the same event, recorded
+    better. One with no such twin is somebody's only record and is kept,
+    including the roughly one real event in a thousand that lands on a second
+    boundary by chance.
+    """
+    cur = conn.execute(
+        """DELETE FROM events WHERE (ts_ms, type, package, class, instance_id) IN (
+             SELECT a.ts_ms, a.type, a.package, a.class, a.instance_id FROM events a
+              WHERE a.ts_ms % 1000 = 0 AND a.ts_ms BETWEEN ? AND ?
+                AND EXISTS (SELECT 1 FROM events b
+                             WHERE b.type = a.type AND b.package = a.package
+                               AND b.ts_ms % 1000 != 0
+                               AND b.ts_ms >= a.ts_ms AND b.ts_ms < a.ts_ms + 1000))""",
+        (lo - 1000, hi + 1000),
+    )
+    return cur.rowcount
 
 
 def insert_interval_stats(conn: sqlite3.Connection, stats) -> int:

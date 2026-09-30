@@ -39,11 +39,19 @@ def _merge(path: Path, fields: list[str], rows: list[dict],
         old = existing.get(k)
         if old is None:
             existing[k] = {f: _cell(row.get(f)) for f in fields}
-        elif _num(row.get(richer)) >= _num(old.get(richer)):
-            # The fuller reading wins, but only cell by cell: a value the new
-            # export lacks must not blank out one the archive already holds.
-            existing[k] = {f: _cell(row.get(f)) if _cell(row.get(f)) != "" else old.get(f, "")
-                           for f in fields}
+        else:
+            # Merge cell by cell, and never let a number go down. Every figure
+            # here is a count or a duration over a fixed period, so it can only
+            # grow as more of that period is captured -- a smaller value means
+            # the writer saw less, not that the truth changed.
+            #
+            # The old rule trusted a single column: if `richer` was larger, the
+            # whole row won. One machine with a gap in its event stream sent a
+            # device_daily row whose screen_on_ms was larger while every other
+            # field was 0, and it overwrote six good days in one export. Judging
+            # each cell on its own makes that impossible, whatever the writer.
+            prefer_new = _num(row.get(richer)) >= _num(old.get(richer))
+            existing[k] = {f: _keep_larger(row.get(f), old.get(f), prefer_new) for f in fields}
 
     out = sorted(existing.values(), key=lambda r: tuple(str(r.get(k, "")) for k in key))
     tmp = path.with_suffix(".csv.tmp")
@@ -53,6 +61,25 @@ def _merge(path: Path, fields: list[str], rows: list[dict],
         w.writerows(out)
     tmp.replace(path)          # atomic, so an interrupted export cannot truncate the archive
     return len(out), max(0, len(out) - kept)
+
+
+def _keep_larger(new, old, prefer_new: bool) -> str:
+    """Pick one cell. Numbers never decrease; blanks never erase; text follows the
+    fuller row."""
+    n, o = _cell(new), _cell(old)
+    if n == "" or o == "":
+        return n or o
+    if _is_num(n) and _is_num(o):
+        return n if float(n) >= float(o) else o
+    return n if prefer_new else o
+
+
+def _is_num(v) -> bool:
+    try:
+        float(v)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def _cell(v) -> str:

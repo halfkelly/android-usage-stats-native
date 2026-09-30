@@ -452,12 +452,27 @@ FS_START, FS_STOP = "FOREGROUND_SERVICE_START", "FOREGROUND_SERVICE_STOP"
 INTERACTION_EVENT = "USER_INTERACTION"
 
 
+# A screen-on or unlock that never closes is a hole in the event stream, not a
+# marathon. The events table can have gaps -- a machine that synced after the
+# phone had already pruned days, a database rebuilt from a partial archive -- and
+# pairing across one attributes the whole gap as usage. That is not hypothetical:
+# a seven-day gap once paired 2026-09-14 17:02 with 2026-09-21 18:36 and handed
+# six intermediate days a full 86,400,000 ms of screen-on with zero app time,
+# which then won the archive merge and overwrote six good days. An unclosed pair
+# is dropped rather than clamped: under-counting a gap is honest, inventing a
+# day of screen time is not.
+MAX_SCREEN_PAIR_MS = 12 * 60 * 60 * 1000       # no phone is interactive for 12h straight
+MAX_SERVICE_PAIR_MS = 36 * 60 * 60 * 1000      # music and navigation legitimately run long
+
+
 def _paired_ms_per_day(conn, start_type: str, stop_type: str, start: str, end: str,
-                       by_package: bool = False) -> dict:
+                       by_package: bool = False,
+                       max_pair_ms: int = MAX_SCREEN_PAIR_MS) -> dict:
     """Total milliseconds between start/stop event pairs, split at local midnight.
 
     Used for screen-on, unlocked, and foreground-service time -- all of which are
-    open/close pairs in the event stream rather than stored durations.
+    open/close pairs in the event stream rather than stored durations. A pair
+    longer than `max_pair_ms` is treated as a lost stop event and skipped.
     """
     rows = conn.execute(
         f"""SELECT ts_ms, type, package FROM events WHERE type IN (?, ?)
@@ -472,6 +487,8 @@ def _paired_ms_per_day(conn, start_type: str, stop_type: str, start: str, end: s
             open_at.setdefault(key, r["ts_ms"])
         elif key in open_at:
             a, b = open_at.pop(key), r["ts_ms"]
+            if b - a > max_pair_ms:
+                continue                       # stop event lost; do not invent the gap
             # split across midnight so each day gets only its own share
             while a < b:
                 d = datetime.fromtimestamp(a / 1000).date()
@@ -530,7 +547,8 @@ def device_daily(conn: sqlite3.Connection, start: str, end: str, exclude=()) -> 
 
 def app_daily_full(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
     """Per-app, per-calendar-day: every event-derived metric available."""
-    fs = _paired_ms_per_day(conn, FS_START, FS_STOP, start, end, by_package=True)
+    fs = _paired_ms_per_day(conn, FS_START, FS_STOP, start, end, by_package=True,
+                            max_pair_ms=MAX_SERVICE_PAIR_MS)
     labels = {r["package"]: r["label"] for r in conn.execute("SELECT package, label FROM apps")}
     usage = {
         (r["day"], r["package"]): r["ms"] for r in conn.execute(

@@ -424,3 +424,14 @@ and can always be regenerated with `rebuild`.
 - The dump format is Android-version specific. It was written against
   Android 16 / One UI on an SM-S901E; the parser accepts several key spellings,
   but a very different version may need `parse.py` adjusted.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest tests/ -q
+```
+
+Sixteen checks on the invariants the archive must hold -- that a number never
+decreases, that a blank never erases, that a day once archived survives a
+database which has forgotten it, and that a gap in the event stream is never
+attributed as usage. They exist because each one has been violated in practice.

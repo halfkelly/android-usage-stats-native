@@ -5,3 +5,4 @@ requests>=2.31
 # the web SSO flow (/sso/embed + /sso/signin) that connect.garmin.com itself
 # uses, and that still answers us. See wellbeing/garmin.py.
 garth==0.6.3
+pytest>=8.0

@@ -260,6 +260,14 @@ archive did not yet exist when those events were pruned from the phone.
 - **Blank means "not measured"; `0` means "measured, and it was none".** The gap
   matters: blanks in early `app_daily.csv` rows are unknown, not zero, and the
   import path preserves the distinction rather than coercing unknowns to `0`.
+- **A number in the archive never goes down.** Every figure here is a count or a
+  duration over a fixed period, so it can only grow as more of that period is
+  captured. The export merges cell by cell and keeps the larger value, so a
+  machine that saw less of a day cannot thin one that saw more -- whatever it
+  sends. Before 2026-09-30 the merge picked a winner by comparing a single
+  column, and a machine whose event stream had a seven-day hole overwrote six
+  good days of `device_daily.csv` with rows reading 24h of screen-on and zero of
+  everything else. Restored from a snapshot; the rule above is the fix.
 - **The phone-window files round-trip losslessly.** `app_buckets.csv`,
   `device_counters.csv` and `device_configs.csv` carry exact `range_end_at` and
   last-seen timestamps, so a database rebuilt from the archive with `import`

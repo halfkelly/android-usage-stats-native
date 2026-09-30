@@ -52,8 +52,10 @@ def require_device(serial: str | None = None) -> str:
     devs = devices()
     if not devs:
         raise AdbError(
-            "No device attached. Connect the phone over USB, enable Developer "
-            "options > USB debugging, and accept the 'Allow USB debugging' prompt."
+            "No phone reachable. Turn on Settings > Developer options > Wireless "
+            "debugging with the phone on the same Wi-Fi, then run 'wellbeing "
+            "connect <ip:port>' using the address it shows. The port changes after "
+            "a reboot. A USB cable also works if you prefer."
         )
     if serial:
         for s, state in devs:

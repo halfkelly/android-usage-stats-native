@@ -184,18 +184,28 @@ def test_a_second_aligned_event_with_no_twin_is_kept():
 # --- a pair may never swallow a whole day ------------------------------------
 
 def test_a_pair_spanning_three_days_is_rejected():
-    """The foreground-service case: under the magnitude cap, still absurd.
-
-    A 34h music session is below the 36h ceiling the first fix used, but it
-    still contains one whole calendar day -- which is how Amazon Music came to
-    show 24h of playback on days the app was never opened.
-    """
+    """A 34h music session contains one whole calendar day."""
     conn = _conn([(_ms(14, 20), stats.FS_START), (_ms(16, 6), stats.FS_STOP)])
     out = stats._paired_ms_per_day(conn, stats.FS_START, stats.FS_STOP,
                                   "2026-09-14", "2026-09-16",
                                   max_pair_ms=stats.MAX_SERVICE_PAIR_MS)
+    assert out == {}, f"a pair containing a whole day should be dropped, got {out}"
+
+
+def test_an_exactly_24h_pair_cannot_hand_a_day_the_whole_day():
+    """The case a length cap cannot catch, and the first fix missed.
+
+    Midnight to midnight is exactly 24h, so it passes any 24h ceiling; it
+    touches a single calendar day, so it passes a two-day rule; and that one day
+    is then credited with all 86,400,000 ms. Only a rule about the RESULT stops
+    it. This is the exact shape Amazon Music showed on six days.
+    """
+    conn = _conn([(_ms(15, 0), stats.FS_START), (_ms(16, 0), stats.FS_STOP)])
+    out = stats._paired_ms_per_day(conn, stats.FS_START, stats.FS_STOP,
+                                  "2026-09-15", "2026-09-16",
+                                  max_pair_ms=stats.MAX_SERVICE_PAIR_MS)
     assert 86_400_000 not in out.values(), f"a day was handed all 24 hours: {out}"
-    assert out == {}, f"a pair spanning three days should be dropped, got {out}"
+    assert out == {}
 
 
 def test_an_overnight_service_still_counts():

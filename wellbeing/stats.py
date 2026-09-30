@@ -489,24 +489,27 @@ def _paired_ms_per_day(conn, start_type: str, stop_type: str, start: str, end: s
             a, b = open_at.pop(key), r["ts_ms"]
             if b - a > max_pair_ms:
                 continue                       # stop event lost; do not invent the gap
-            # A pair may touch at most two calendar days. This is what actually
-            # stops a day being handed a full 86,400,000 ms: for a day to be
-            # credited with all 24 hours it has to sit *entirely inside* the
-            # pair, which takes a third day. The magnitude cap above is not
-            # enough on its own -- a 34h foreground-service pair is under a 36h
-            # ceiling and still swallows a whole day, which is how Amazon Music
-            # came to show 24h of playback on days the app was never opened.
-            if (datetime.fromtimestamp(b / 1000).date()
-                    - datetime.fromtimestamp(a / 1000).date()).days > 1:
-                continue
-            # split across midnight so each day gets only its own share
-            while a < b:
-                d = datetime.fromtimestamp(a / 1000).date()
+            # Work the pair out before committing any of it, because the rule
+            # that matters is about the RESULT, not the pair's length: no single
+            # day may be credited with all 24 hours. A day can only receive
+            # 86,400,000 ms if it sits wholly inside the pair, which means the
+            # stop event was lost -- and a length cap alone does not catch it. A
+            # pair running exactly midnight to midnight is 24h, passes any 24h
+            # ceiling, touches one day, and hands that day the entire thing.
+            # This is how Amazon Music came to show a full day of playback on
+            # days the app was never opened.
+            chunks = []
+            t = a
+            while t < b:
+                d = datetime.fromtimestamp(t / 1000).date()
                 edge = int(datetime(d.year, d.month, d.day).timestamp() * 1000) + 86_400_000
-                chunk_end = min(b, edge)
-                k = (str(d), key) if by_package else str(d)
-                out[k] += chunk_end - a
-                a = chunk_end
+                stop = min(b, edge)
+                chunks.append(((str(d), key) if by_package else str(d), stop - t))
+                t = stop
+            if any(ms >= 86_400_000 for _, ms in chunks):
+                continue
+            for slot, ms in chunks:
+                out[slot] += ms
     return dict(out)
 
 

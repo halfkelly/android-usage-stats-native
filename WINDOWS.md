@@ -17,6 +17,28 @@ and each keep their own derived SQLite database.
   got its copy, and what task 1 replaces
 - Read `DATA.md` for the archive format and `README.md` for setup
 
+## Status — 2026-09-30
+
+| Task | State |
+|---|---|
+| 1. Git clone | **done** — clone of `main`, `.venv`/`platform-tools`/`data` intact |
+| 2. Reach the archive | **mostly done** — `G:` resolves, `Asia/Kolkata` confirmed; `nofail` fstab edit still to do |
+| 3. Phone over Wi-Fi | **done** — paired and connected (`192.168.1.5`) |
+| 4. adb without sudo | **dropped** — wireless needs no sudo, so the udev rule is moot |
+| 5. Recover timezone edits | **struck** — nothing to recover |
+| 6. Unattended sync | **open** — the last piece |
+
+First sync from this machine is done and verified: three overlapping days
+(25-27 Sep) matched the Mac exactly, to the millisecond, which is what proves
+days are being cut in `Asia/Kolkata` and not in this machine's UTC. The export
+was pure addition -- every row count rose, none were rewritten, and Drive
+produced no conflict copies.
+
+`autosync.sh` also gained a real fix from this machine (`d25d9d8`): the lock-age
+check ran `stat -f` before `stat -c`, and on GNU coreutils `-f` is
+`--file-system` with `%m` meaning *mount point*, so the age arithmetic got a path
+instead of a number and every lock was mis-read. Ordering is now GNU-first.
+
 ## The goal, in one line
 
 **Make this machine do everything the Mac does, unattended.** Same code, same

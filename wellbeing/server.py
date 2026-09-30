@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
 
-from . import (adb, appdump, archive, db, export as export_mod, stats,
+from . import (adb, appdump, archive, db, export as export_mod, importer, stats,
                sync as sync_mod)
 
 RANGES = {"1": 1, "3": 3, "7": 7, "14": 14, "30": 30, "90": 90}
@@ -112,9 +112,14 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
         """
         c = conn()
         serial = (request.json or {}).get("serial") if request.is_json else None
+        pulled = None
         try:
-            serial = adb.require_device(serial)
             sync_mod.backup_db(c)
+            # Pull in whatever the other machine archived first, so pressing this
+            # converges the dashboard even when the phone cannot be reached --
+            # the same order autosync.sh uses.
+            pulled = importer.import_archive(c)
+            serial = adb.require_device(serial)
             try:
                 result = appdump.ingest_files(c, appdump.capture(serial))
             except (adb.AdbError, FileNotFoundError, OSError):
@@ -122,7 +127,10 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             cov = stats.coverage(c)
             written = export_mod.export_all(c, cov["days"][0], cov["days"][-1])
         except adb.AdbError as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 409
+            # The import above still happened, so say what did land rather than
+            # reporting a flat failure.
+            return jsonify({"ok": False, "error": str(exc),
+                            "imported": (pulled or {}).get("events_added", 0)}), 409
         return jsonify({
             "ok": True,
             "events_added": result.get("events_added", 0),

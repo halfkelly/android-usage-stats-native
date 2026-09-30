@@ -13,6 +13,13 @@ echo "  Phone Usage — sync"
 echo "  ------------------"
 echo ""
 
+# Pull in whatever the other computer has already archived. Done before the
+# phone is even looked for, so this still brings the dashboard up to date on a
+# machine that cannot reach the phone right now.
+echo "  Catching up on the shared archive..."
+"$PY" -m wellbeing import 2>/dev/null | tail -2 | sed 's/^/  /'
+echo ""
+
 # A phone already on Wi-Fi needs no cable; harmless when there isn't one.
 "$PY" -m wellbeing connect >/dev/null 2>&1 || true
 

@@ -22,7 +22,7 @@ fi
 LOCK="$ARCHIVE/sync.lock"
 ME="$(hostname -s)"
 if [ -f "$LOCK" ]; then
-  AGE=$(( $(date +%s) - $(stat -f %m "$LOCK" 2>/dev/null || stat -c %Y "$LOCK") ))
+  AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || stat -f %m "$LOCK") ))
   HOLDER=$(cat "$LOCK" 2>/dev/null)
   if [ "$AGE" -lt 900 ] && [ "$HOLDER" != "$ME" ]; then
     echo "$(stamp) $HOLDER is syncing (${AGE}s ago); skipping"; exit 0

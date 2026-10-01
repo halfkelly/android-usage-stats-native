@@ -114,7 +114,11 @@ def _valid_zone(name: str) -> bool:
 # go through these two helpers: writing one key must never drop the others.
 def _read_meta() -> dict:
     meta = archive_dir() / META_FILE
-    raw = meta.read_text()          # FileNotFoundError is handled by the callers
+    # FileNotFoundError means "no settings yet"; any other OSError means the
+    # archive itself is unreachable. The callers must tell those apart, because
+    # the advice is opposite -- one says record a timezone, the other must never
+    # suggest writing anything.
+    raw = meta.read_text()
     try:
         data = json.loads(raw)
     except ValueError:
@@ -180,6 +184,24 @@ def archive_timezone() -> str:
             f"This archive has no timezone recorded ({meta}).\n"
             f"  Record it once with:  python -m wellbeing set-timezone <Area/City>"
         )
+    except OSError as exc:
+        # The directory resolved but the storage behind it did not. On WSL this
+        # is a stale Google Drive mount: /mnt/g still looks like a directory
+        # after Drive for Desktop stops, so every existence check passes and the
+        # first real read fails with ENODEV. Deliberately does NOT fall back to
+        # $PHONE_USAGE_TZ or suggest set-timezone -- either would start a second,
+        # empty archive at a path that is merely broken.
+        raise TimezoneError(
+            f"The archive is not readable: {meta}\n"
+            f"  {exc.strerror} (errno {exc.errno}). Nothing was read or written.\n"
+            f"  If that is a stale Google Drive mount on WSL -- /mnt/g keeps looking "
+            f"like a\n"
+            f"  directory after Drive for Desktop stops, so every check passes and the "
+            f"first\n"
+            f"  real read fails -- start Drive on Windows, then either\n"
+            f"      sudo umount /mnt/g && sudo mount -t drvfs G: /mnt/g\n"
+            f"  or run  wsl --shutdown  in PowerShell and reopen Ubuntu."
+        ) from exc
     except (ValueError, KeyError):
         raise TimezoneError(f"{meta} is unreadable; expected {{\"timezone\": \"Area/City\"}}")
     if env and env != stored:

@@ -17,7 +17,7 @@ import pytest
 os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
 
-from wellbeing import stats
+from wellbeing import archive, stats
 from wellbeing.export import _keep_larger, _merge
 
 
@@ -215,3 +215,31 @@ def test_an_overnight_service_still_counts():
                                   "2026-09-14", "2026-09-15",
                                   max_pair_ms=stats.MAX_SERVICE_PAIR_MS)
     assert out == {"2026-09-14": 2 * 3_600_000, "2026-09-15": 7 * 3_600_000}
+
+
+# --- an unreachable archive must refuse, not improvise ----------------------
+
+def test_an_unreadable_archive_refuses_instead_of_starting_a_new_one(tmp_path, monkeypatch):
+    """A stale Drive mount looks like a directory but fails on first read.
+
+    The danger is not the error -- it is "recovering" from it. Falling back to
+    $PHONE_USAGE_TZ, or inviting set-timezone, would start a second empty
+    archive at a path that is merely broken, and the two machines would then
+    disagree about every day boundary.
+    """
+    (tmp_path / "archive.json").mkdir()          # a directory where a file belongs
+    monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(tmp_path))
+    monkeypatch.setenv("PHONE_USAGE_TZ", "Etc/UTC")   # must NOT be used as a fallback
+    with pytest.raises(archive.TimezoneError) as e:
+        archive.archive_timezone()
+    assert "Nothing was read or written" in str(e.value)
+    assert "Etc/UTC" not in str(e.value), "fell back to the env var on an unreachable archive"
+
+
+def test_a_missing_archive_json_still_invites_set_timezone(tmp_path, monkeypatch):
+    """The other case, which needs the opposite advice."""
+    monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(tmp_path))
+    monkeypatch.delenv("PHONE_USAGE_TZ", raising=False)
+    with pytest.raises(archive.TimezoneError) as e:
+        archive.archive_timezone()
+    assert "set-timezone" in str(e.value)

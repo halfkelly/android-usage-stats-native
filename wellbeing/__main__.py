@@ -179,7 +179,9 @@ def cmd_import(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"imported from {result['source']}")
-    print(f"  {result['events']:,} events ({result['events_added']:,} new), "
+    added = result["events_added"]
+    change = f"{added:,} new" if added >= 0 else f"{-added:,} duplicates removed"
+    print(f"  {result['events']:,} events ({change}), "
           f"{result['buckets']:,} bucket rows, {result['counters']} counters, "
           f"{result['configs']} configs, {result['labels']} app names")
     days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM usage_slice ORDER BY day")]

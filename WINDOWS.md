@@ -17,6 +17,102 @@ and each keep their own derived SQLite database.
   got its copy, and what task 1 replaces
 - Read `DATA.md` for the archive format and `README.md` for setup
 
+## Do these, then run the acceptance tests below
+
+### Remaining work
+
+1. **Restore the drive letter.** The folder-mount experiment failed -- Drive never
+   created `C:\Users\shrey\Google`, and WSL's automount does not cover Drive's
+   virtual `G:` (verified: `G:` exists and holds the archive, yet `/mnt/g` stays
+   empty without the fstab line). So:
+
+       sudo sed -i 's|^#G: /mnt/g drvfs|G: /mnt/g drvfs|' /etc/fstab
+       sed -i 's|^export PHONE_USAGE_ARCHIVE=.*|export PHONE_USAGE_ARCHIVE="/mnt/g/My Drive/PhoneUsageBackup"|' ~/.bashrc
+       sudo mount -t drvfs G: /mnt/g 2>/dev/null
+       ls "/mnt/g/My Drive/PhoneUsageBackup/archive.json"
+
+   **The `mount -a failed` popup at WSL start is accepted as cosmetic.** Do not
+   spend more time on it. It appears only when WSL starts before Drive has
+   published `G:`, and both sync paths already handle that: `autosync.sh` checks
+   for `archive.json` as a file (a stale mount fails that) and logs a skip, and a
+   manual command prints a clear "archive is not readable, nothing was read or
+   written" error rather than a traceback.
+
+2. **Clean this machine's database.** It imported 4,403 duplicate events from the
+   archive before those were removed, so its dashboard currently overstates
+   counts (92 unlocks on 2026-09-23 where the truth is 56). `import` now carries
+   the dedup rule and `rebuild` recomputes with the whole-day guard, which also
+   repairs the 24h rows this machine's own seven-day event gap produced:
+
+       cd ~/adb_usage_stats && git pull
+       .venv/bin/python -m wellbeing import
+       .venv/bin/python -m wellbeing rebuild
+
+### Acceptance tests -- run all of these and report each result
+
+**A. Unit tests.** `.venv/bin/python -m pytest tests/ -q` -> expect `23 passed`.
+
+**B. Configuration.** `.venv/bin/python -m wellbeing where` must report the
+`/mnt/g/My Drive/PhoneUsageBackup` archive, `timezone: Asia/Kolkata`, and code
+matching the bundle. `echo $PHONE_USAGE_TZ` must be empty.
+
+**C. The two machines must agree, exactly.** This is the test that matters most,
+because disagreement means the day boundaries differ. Run:
+
+    .venv/bin/python -c "
+    from wellbeing import db, archive, stats; archive.pin_timezone()
+    c=db.connect('data/usage.db')
+    for d in stats.daily_totals(c,'2026-09-22','2026-09-30'):
+        print(f\"{d['day']}  {d['ms']:>9} ms  {d['unlocks']:>3} unlocks  {d['notifications']:>3} notifs  {d['apps']:>2} apps\")"
+
+The Mac produced exactly this on 2026-10-01, from 159,532 events:
+
+    2026-09-22   19182125 ms  124 unlocks  231 notifs  35 apps
+    2026-09-23   15172546 ms   56 unlocks  255 notifs  43 apps
+    2026-09-24   12906938 ms   78 unlocks  210 notifs  37 apps
+    2026-09-25   20240485 ms  110 unlocks  298 notifs  45 apps
+    2026-09-26   21484123 ms   86 unlocks  204 notifs  46 apps
+    2026-09-27   19607938 ms   51 unlocks  154 notifs  41 apps
+    2026-09-28   22983155 ms   67 unlocks  156 notifs  58 apps
+    2026-09-29   20582561 ms   79 unlocks  106 notifs  37 apps
+    2026-09-30   15113569 ms  120 unlocks   94 notifs  38 apps
+
+Any difference is a real defect -- investigate before doing anything else. A
+whole-column shift means a timezone problem; inflated counts mean duplicates;
+one odd day usually means that day is still being captured.
+
+**D. No fabricated values.** In the archive, both must be zero:
+
+    grep -c ',86400000,' "$PHONE_USAGE_ARCHIVE/app_daily.csv"
+    grep -c ',86400000,' "$PHONE_USAGE_ARCHIVE/device_daily.csv"
+
+**E. A real sync from this machine.** Pair/connect the phone over Wi-Fi
+(`wellbeing connect <ip:port>` -- the port changes after a phone reboot, read it
+off the phone's Wireless debugging screen), then `./sync.sh`. Expect the archive
+to gain rows and `+0 new` on a second run. Re-run test C afterwards and confirm
+the overlapping days still match the Mac exactly.
+
+**F. The dashboard.** `./dashboard.sh`, then open `http://localhost:5000` in the
+**Windows** browser (WSL2 forwards localhost). Check: the tiles show numbers;
+Today / Yesterday / the two calendar date fields all change the view; clicking a
+bar in "Screen time per day" narrows to that day; the app exclusion panel lists
+apps in descending time order and survives ticking several in a row; the Sync
+button reports what it did.
+
+**G. Unattended sync.** `Get-ScheduledTaskInfo -TaskName "PhoneUsageSync"` in
+PowerShell should show `LastTaskResult 0` and a `NextRunTime` at one of
+03/09/15/21. **Do not trust the exit code** -- read `data/autosync.log` and
+confirm it says either a real sync or a clean skip. Then leave it and check the
+next morning that it fired on its own.
+
+**H. The double-click shortcuts.** From Windows Explorer at
+`\\wsl.localhost\Ubuntu-24.04\home\shrey\adb_usage_stats`, run
+`Sync my phone.bat` and `Open dashboard.bat`. Both should work without a terminal
+already open.
+
+Report every result, including the ones that pass. A silent pass is how two of
+the bugs above survived for a week.
+
 ## Incident, 2026-09-30 — read before syncing again
 
 The first export from this machine corrupted 292 rows of the shared archive. It

@@ -78,7 +78,7 @@ final class Notifier {
             return "Nothing collected since " + ago(collected) + ": "
                     + p.getString(State.LAST_COLLECT_RESULT, "unknown error");
         }
-        if (DriveAuth.configured() && p.getBoolean(State.NEEDS_RECONNECT, false)) {
+        if (p.getBoolean(State.NEEDS_RECONNECT, false)) {
             return "The Google Drive sign-in has expired. Tap to reconnect; nothing is lost meanwhile.";
         }
         long uploaded = p.getLong(State.LAST_UPLOAD_OK_MS, 0L);

@@ -1,21 +1,38 @@
 package com.shrey.usagedump;
 
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.accounts.AccountManagerFuture;
+import android.accounts.AuthenticatorException;
+import android.accounts.OperationCanceledException;
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Google sign-in by the OAuth device flow ("TVs and Limited Input devices"):
- * the app shows a code, you enter it at google.com/device, and the app keeps a
- * refresh token. Plain HTTPS, so no Play services library -- the APK is built
- * without Gradle and has nowhere to put one.
+ * Google sign-in, two ways, both for the one scope drive.file: the app can see
+ * and change the files it created, and nothing else in the Drive.
  *
- * The only scope is drive.file: the app can see and change the files it
- * created, and nothing else in the Drive.
+ * The normal way uses the Google account already on the phone, through the
+ * framework's AccountManager: pick the account, tap Allow, done. Google
+ * recognises the app by package name and signing-key SHA-1 (the "Android"
+ * OAuth client in the Cloud project), so nothing secret is in the APK, and
+ * Android keeps and renews the token -- the app stores only the account name.
+ *
+ * The fallback is the OAuth device flow ("TVs and Limited Input devices"):
+ * a code typed in at google.com/device, and a refresh token kept here. Plain
+ * HTTPS; it needs the client in oauth.properties (DRIVE_SETUP.md).
+ *
+ * Both clients belong to the same Cloud project, and drive.file access is per
+ * project, so either sign-in sees the files the other uploaded.
  */
 final class DriveAuth {
     private DriveAuth() {}
@@ -46,12 +63,72 @@ final class DriveAuth {
         }
     }
 
-    static boolean configured() {
+    static final String ACCOUNT_TYPE = "com.google";
+    private static final String TOKEN_TYPE = "oauth2:" + SCOPE;
+
+    /** The device-code fallback is available (this build has oauth.properties). */
+    static boolean codeSignInAvailable() {
         return !Secrets.CLIENT_ID.isEmpty();
     }
 
     static boolean connected(Context c) {
-        return State.get(c).getString(State.REFRESH_TOKEN, null) != null;
+        SharedPreferences p = State.get(c);
+        return p.getString(State.ACCOUNT_NAME, null) != null
+                || p.getString(State.REFRESH_TOKEN, null) != null;
+    }
+
+    /** Which account uploads go to, for the status screen; null for a code sign-in. */
+    static String accountName(Context c) {
+        return State.get(c).getString(State.ACCOUNT_NAME, null);
+    }
+
+    /** "Pick a Google account" -- the phone's own chooser. */
+    static Intent chooseAccountIntent() {
+        return AccountManager.newChooseAccountIntent(null, null, new String[] {ACCOUNT_TYPE},
+                null, null, null, null);
+    }
+
+    /**
+     * Interactive: ask for Drive access for the picked account. Passing the
+     * activity lets Android show Google's "Allow" screen itself. Blocks until
+     * the user answers, so call it off the main thread.
+     */
+    static void connectAccount(Activity a, String name) throws IOException, AuthException {
+        AccountManagerFuture<Bundle> f = AccountManager.get(a).getAuthToken(
+                new Account(name, ACCOUNT_TYPE), TOKEN_TYPE, null, a, null, null);
+        String token = tokenFrom(f, 10 * 60);  // the user may take a while on the Allow screen
+        if (token == null) throw new AuthException("Google didn't grant access");
+        State.get(a).edit().putString(State.ACCOUNT_NAME, name).putString(State.ACCESS_TOKEN, token)
+                .remove(State.REFRESH_TOKEN).remove(State.NEEDS_RECONNECT).apply();
+    }
+
+    /** Background: a token for the chosen account, or AuthException if it needs the user. */
+    private static String accountToken(Context c, String name, boolean fresh) throws IOException, AuthException {
+        SharedPreferences p = State.get(c);
+        AccountManager am = AccountManager.get(c);
+        String old = p.getString(State.ACCESS_TOKEN, null);
+        if (fresh && old != null) am.invalidateAuthToken(ACCOUNT_TYPE, old);  // Drive said 401
+        String token = tokenFrom(am.getAuthToken(new Account(name, ACCOUNT_TYPE), TOKEN_TYPE,
+                null, false, null, null), 60);
+        if (token == null) {
+            // Android has an "Allow" screen to show, so the grant was withdrawn.
+            p.edit().putBoolean(State.NEEDS_RECONNECT, true).apply();
+            throw new AuthException("Google needs you to allow Drive access again");
+        }
+        p.edit().putString(State.ACCESS_TOKEN, token).apply();
+        return token;
+    }
+
+    private static String tokenFrom(AccountManagerFuture<Bundle> f, int timeoutS)
+            throws IOException, AuthException {
+        try {
+            return f.getResult(timeoutS, TimeUnit.SECONDS).getString(AccountManager.KEY_AUTHTOKEN);
+        } catch (OperationCanceledException e) {
+            throw new AuthException("sign-in cancelled");
+        } catch (AuthenticatorException e) {
+            // Also how an unregistered package or SHA-1 shows up.
+            throw new IOException("Google sign-in: " + e.getMessage(), e);
+        }
     }
 
     static DeviceCode start() throws IOException {
@@ -92,6 +169,8 @@ final class DriveAuth {
     /** A valid access token, refreshed when it is within a minute of expiring. */
     static String accessToken(Context c, boolean forceRefresh) throws IOException, AuthException {
         SharedPreferences p = State.get(c);
+        String account = p.getString(State.ACCOUNT_NAME, null);
+        if (account != null) return accountToken(c, account, forceRefresh);
         String refresh = p.getString(State.REFRESH_TOKEN, null);
         if (refresh == null) throw new AuthException("not connected");
         String token = p.getString(State.ACCESS_TOKEN, null);
@@ -120,6 +199,11 @@ final class DriveAuth {
     static void disconnect(Context c) {
         SharedPreferences p = State.get(c);
         String refresh = p.getString(State.REFRESH_TOKEN, null);
+        String access = p.getString(State.ACCESS_TOKEN, null);
+        if (p.getString(State.ACCOUNT_NAME, null) != null && access != null) {
+            // The grant itself stays listed at myaccount.google.com until removed there.
+            AccountManager.get(c).invalidateAuthToken(ACCOUNT_TYPE, access);
+        }
         SharedPreferences.Editor e = p.edit();
         // Folder and file ids may belong to an account that is about to change;
         // the uploader finds them again by name after the next sign-in.
@@ -127,6 +211,7 @@ final class DriveAuth {
             if (k.startsWith(State.FOLDER_PREFIX) || k.startsWith(State.UPLOADED_PREFIX)) e.remove(k);
         }
         e.remove(State.REFRESH_TOKEN).remove(State.ACCESS_TOKEN).remove(State.NEEDS_RECONNECT)
+                .remove(State.ACCOUNT_NAME)
                 .remove(State.LAYOUT_V2).apply();
         if (refresh != null) {
             try {

@@ -1,5 +1,6 @@
 package com.shrey.usagedump;
 
+import android.accounts.AccountManager;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -35,9 +36,10 @@ public class DumpActivity extends Activity {
 
     private static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS";
     static final String EXTRA_CONNECT = "connect";
+    private static final int REQ_ACCOUNT = 2;
 
     private TextView status, codeView;
-    private Button access, battery, drive, runNow, openGoogle;
+    private Button access, battery, drive, runNow, openGoogle, codeSignIn;
     private String verificationUrl;
     private volatile boolean busy;
 
@@ -50,9 +52,8 @@ public class DumpActivity extends Activity {
         }
         setContentView(buildUi());
         CollectorJob.schedule(this);
-        if (getIntent().getBooleanExtra(EXTRA_CONNECT, false) && DriveAuth.configured()
-                && !DriveAuth.connected(this)) {
-            connect();
+        if (getIntent().getBooleanExtra(EXTRA_CONNECT, false) && !DriveAuth.connected(this)) {
+            pickAccount();
         }
         // Android 13+ shows nothing until this is granted, and the one
         // notification is how a broken collection gets noticed.
@@ -108,6 +109,8 @@ public class DumpActivity extends Activity {
                 v -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
         battery = button(col, "Let it run in the background", v -> askBattery());
         drive = button(col, "Connect Google Drive", v -> onDrive());
+        codeSignIn = button(col, "Sign in with a code instead", v -> connect());
+        codeSignIn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(col);
@@ -139,10 +142,10 @@ public class DumpActivity extends Activity {
         s.append("Collected: ").append(when(p, State.LAST_COLLECT_AT)).append('\n')
                 .append("  ").append(p.getString(State.LAST_COLLECT_RESULT, "—")).append('\n')
                 .append("Days on the phone: ").append(days == null ? 0 : days.length).append("\n\n");
-        if (!DriveAuth.configured()) {
-            s.append("Drive: not set up in this build (see android/DRIVE_SETUP.md)\n");
-        } else if (connected) {
-            s.append("Drive: connected, uploading to ").append(DriveUploader.SHOWN_PATH).append('\n')
+        if (connected) {
+            String account = DriveAuth.accountName(this);
+            s.append("Drive: connected").append(account != null ? " as " + account : "")
+                    .append(",\nuploading to ").append(DriveUploader.SHOWN_PATH).append('\n')
                     .append("Uploaded: ").append(when(p, State.LAST_UPLOAD_AT)).append('\n')
                     .append("  ").append(p.getString(State.LAST_UPLOAD_RESULT, "—")).append('\n')
                     .append("Waiting to upload: ").append(DriveUploader.pending(this, root))
@@ -160,10 +163,11 @@ public class DumpActivity extends Activity {
 
         access.setVisibility(hasAccess ? View.GONE : View.VISIBLE);
         battery.setVisibility(unrestricted ? View.GONE : View.VISIBLE);
-        drive.setVisibility(DriveAuth.configured() ? View.VISIBLE : View.GONE);
         drive.setText(connected ? "Disconnect Google Drive" : "Connect Google Drive");
+        codeSignIn.setVisibility(!connected && DriveAuth.codeSignInAvailable() ? View.VISIBLE : View.GONE);
         runNow.setEnabled(!busy);
         drive.setEnabled(!busy);
+        codeSignIn.setEnabled(!busy);
     }
 
     private static String when(SharedPreferences p, String key) {
@@ -192,11 +196,40 @@ public class DumpActivity extends Activity {
             background("Disconnecting…", () -> DriveAuth.disconnect(this));
             return;
         }
-        connect();
+        pickAccount();
+    }
+
+    /** The normal sign-in: the phone's account chooser, then Google's Allow screen. */
+    private void pickAccount() {
+        startActivityForResult(DriveAuth.chooseAccountIntent(), REQ_ACCOUNT);
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != REQ_ACCOUNT || result != RESULT_OK || data == null) return;
+        String name = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+        if (name == null) return;
+        background("Signing in…", () -> {
+            try {
+                DriveAuth.connectAccount(this, name);
+            } catch (Exception e) {
+                toastStatus("Not connected: " + e.getMessage()
+                        + (DriveAuth.codeSignInAvailable() ? "\nYou can try \"Sign in with a code instead\"." : ""));
+                return;
+            }
+            Notifier.announce(this, "Google Drive connected ✓", "Uploading to " + DriveUploader.SHOWN_PATH + ".");
+            runOnUiThread(() -> {
+                codeView.setText("✓ Connected to Google Drive as " + name + ".\nUploading your data now.");
+                codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+                codeView.setVisibility(View.VISIBLE);
+            });
+            CollectorJob.uploadNow(this);
+        });
     }
 
     /**
-     * The device flow, made hard to get lost in: the code and three numbered
+     * The fallback device flow, made hard to get lost in: the code and three numbered
      * steps are on screen before anything opens, the code is already copied,
      * and approval is announced by a notification -- visible from the browser,
      * so there is no need to switch back to find out whether it worked.

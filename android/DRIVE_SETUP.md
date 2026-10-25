@@ -37,39 +37,55 @@ else in your Drive.
    warning during sign-in. That's expected for a personal app: choose
    **Advanced → Go to Usage Dump**.
 
-## 3. OAuth client
+## 3. OAuth clients
 
-1. **Clients → Create client** → type **TVs and Limited Input devices** →
-   name `Usage Dump phone` → Create.
-2. Copy the **Client ID** and **Client secret** into `android/oauth.properties`:
+**The Android client is the normal sign-in.** **Clients → Create client** →
+type **Android**:
+- Package name: `com.shrey.usagedump`
+- SHA-1 certificate fingerprint:
+  `E6:6F:DB:DC:4D:A9:F0:2F:D3:BE:5D:26:8E:CA:DF:23:BF:36:D9:53`. That's the
+  app's signing key, `android/debug.keystore`. Print it with
+  `tools/jdk-linux/bin/keytool -list -v -keystore android/debug.keystore -storepass android`.
 
-   ```properties
-   client_id=1234567890-abc...apps.googleusercontent.com
-   client_secret=GOCSPX-...
-   ```
+There's nothing to copy into the app. Google recognises it by package name and
+fingerprint, and the phone's own Google account does the sign-in. If the
+signing key ever changes, the fingerprint here must change too.
 
-   The file is gitignored. For this kind of client, Google says the secret
-   isn't truly confidential, since it ships inside the app. It stays out of
-   git anyway.
+**The device-code client is the fallback** ("Sign in with a code instead").
+**Clients → Create client** → type **TVs and Limited Input devices** → Create,
+then put its id and secret in `android/oauth.properties`:
+
+```properties
+client_id=1234567890-abc...apps.googleusercontent.com
+client_secret=GOCSPX-...
+```
+
+The file is gitignored and backed up in `My Drive/PhoneUsage/code/signing/`.
+Google doesn't treat this kind of secret as truly confidential, because it
+ships inside the app, but it stays out of git anyway.
+
+Both clients belong to the same project, and Drive's `drive.file` access is
+per project, so either sign-in sees what the other uploaded.
 
 ## 4. Build and connect
 
 ```bash
-bash android/build.sh        # no "building without Drive upload" note this time
+bash android/build.sh
 ```
 
-Install the APK (see WINDOWS.md, "Install the phone app"), open **Usage Dump**,
-tap **Connect Google Drive**. The app copies a code and opens
-google.com/device: paste the code, pick the account, **Allow**, then switch
-back to the app. It uploads straight away. After that it uploads every
-6 hours on its own.
+Install the APK (README, "Building the phone app"), open **Usage Dump**, and
+tap **Connect Google Drive**: pick the account in the phone's account picker,
+then **Allow**. A "Google Drive connected ✓" notification confirms it, and the
+upload starts straight away. After that it uploads every 6 hours on its own.
 
 ## If uploads stop
 
-The status screen says why:
+The app shows a notification, and the status screen says why:
 
-- **"access expired — reconnect"**: the consent screen was left in Testing, the
-  grant was removed at <https://myaccount.google.com/permissions>, or the
-  password changed. Tap **Connect Google Drive** again. Nothing collected in
-  the meantime is lost, and it all uploads after reconnecting.
+- **"sign-in has expired"**: the consent screen was left in Testing (7 days),
+  or the grant was removed at <https://myaccount.google.com/permissions>. Tap
+  the notification, then pick the account and **Allow** again. Nothing
+  collected in the meantime is lost; it all uploads after reconnecting.
 - **"(will retry)"**: no network or a Drive hiccup. It retries on its own.
+- **"Google sign-in: …"** straight after picking the account: the Android
+  client's package name or SHA-1 doesn't match the app. Check step 3.

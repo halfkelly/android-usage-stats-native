@@ -5,8 +5,10 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
@@ -31,8 +33,12 @@ import java.io.File;
  */
 public class DumpActivity extends Activity {
 
+    private static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS";
+    static final String EXTRA_CONNECT = "connect";
+
     private TextView status, codeView;
-    private Button access, battery, drive, runNow;
+    private Button access, battery, drive, runNow, openGoogle;
+    private String verificationUrl;
     private volatile boolean busy;
 
     @Override
@@ -44,6 +50,16 @@ public class DumpActivity extends Activity {
         }
         setContentView(buildUi());
         CollectorJob.schedule(this);
+        if (getIntent().getBooleanExtra(EXTRA_CONNECT, false) && DriveAuth.configured()
+                && !DriveAuth.connected(this)) {
+            connect();
+        }
+        // Android 13+ shows nothing until this is granted, and the one
+        // notification is how a broken collection gets noticed.
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {POST_NOTIFICATIONS}, 1);
+        }
     }
 
     private void legacyDump(int days) {
@@ -58,7 +74,10 @@ public class DumpActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (status != null) refresh();
+        if (status != null) {
+            refresh();
+            CollectorJob.notifySafely(this);  // clears it once the problem is fixed
+        }
     }
 
     private View buildUi() {
@@ -80,6 +99,10 @@ public class DumpActivity extends Activity {
         codeView.setVisibility(View.GONE);
         col.addView(codeView);
 
+        openGoogle = button(col, "Open Google sign-in", v -> {
+            if (verificationUrl != null) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(verificationUrl)));
+        });
+        openGoogle.setVisibility(View.GONE);
         runNow = button(col, "Run now", v -> runNow());
         access = button(col, "Grant usage access",
                 v -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
@@ -119,7 +142,7 @@ public class DumpActivity extends Activity {
         if (!DriveAuth.configured()) {
             s.append("Drive: not set up in this build (see android/DRIVE_SETUP.md)\n");
         } else if (connected) {
-            s.append("Drive: connected, uploading to My Drive/").append(DriveUploader.INBOX).append('\n')
+            s.append("Drive: connected, uploading to ").append(DriveUploader.SHOWN_PATH).append('\n')
                     .append("Uploaded: ").append(when(p, State.LAST_UPLOAD_AT)).append('\n')
                     .append("  ").append(p.getString(State.LAST_UPLOAD_RESULT, "—")).append('\n')
                     .append("Waiting to upload: ").append(DriveUploader.pending(this, root))
@@ -169,12 +192,22 @@ public class DumpActivity extends Activity {
             background("Disconnecting…", () -> DriveAuth.disconnect(this));
             return;
         }
-        background("Signing in…", () -> {
+        connect();
+    }
+
+    /**
+     * The device flow, made hard to get lost in: the code and three numbered
+     * steps are on screen before anything opens, the code is already copied,
+     * and approval is announced by a notification -- visible from the browser,
+     * so there is no need to switch back to find out whether it worked.
+     */
+    private void connect() {
+        background("Getting a code…", () -> {
             DriveAuth.DeviceCode dc;
             try {
                 dc = DriveAuth.start();
             } catch (Exception e) {
-                toastStatus("Couldn't start sign-in: " + e.getMessage());
+                toastStatus("Couldn't reach Google: " + e.getMessage() + "\nCheck the internet connection and tap Connect again.");
                 return;
             }
             final DriveAuth.DeviceCode code = dc;
@@ -182,10 +215,16 @@ public class DumpActivity extends Activity {
             try {
                 DriveAuth.await(this, code);
             } catch (Exception e) {
-                toastStatus("Not connected: " + e.getMessage());
+                toastStatus("Not connected: " + e.getMessage() + ".\nTap Connect Google Drive to try again.");
                 return;
             }
-            runOnUiThread(() -> codeView.setVisibility(View.GONE));
+            Notifier.announce(this, "Google Drive connected ✓",
+                    "Uploading now. You can go back to what you were doing.");
+            runOnUiThread(() -> {
+                codeView.setText("✓ Connected to Google Drive.\nUploading your data now.");
+                codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+                openGoogle.setVisibility(View.GONE);
+            });
             CollectorJob.uploadNow(this);
         });
     }
@@ -193,11 +232,16 @@ public class DumpActivity extends Activity {
     private void showCode(DriveAuth.DeviceCode dc) {
         ClipboardManager cb = getSystemService(ClipboardManager.class);
         cb.setPrimaryClip(ClipData.newPlainText("Google code", dc.userCode));
-        codeView.setText("Enter this code at\n" + dc.verificationUrl + "\n\n" + dc.userCode
-                + "\n\n(copied — sign in, allow access, then come back)");
-        codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        verificationUrl = dc.verificationUrl;
+        codeView.setText("Your code (already copied):\n\n" + dc.userCode + "\n\n"
+                + "1.  Tap Open Google sign-in below and paste the code.\n"
+                + "2.  Choose your Google account.\n"
+                + "3.  If Google says it hasn't verified the app, tap Continue, then Continue again to allow access.\n\n"
+                + "You'll get a notification when it's done. This code works for "
+                + Math.max(1, (dc.expiresAtMs - System.currentTimeMillis()) / 60000) + " minutes.");
+        codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         codeView.setVisibility(View.VISIBLE);
-        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(dc.verificationUrl)));
+        openGoogle.setVisibility(View.VISIBLE);
     }
 
     private void toastStatus(String msg) {

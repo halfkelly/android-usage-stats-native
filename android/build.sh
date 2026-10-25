@@ -25,9 +25,12 @@ ANDROID_JAR="$PLATFORM/android.jar"
 OUT=build
 rm -rf $OUT/classes $OUT/gen $OUT/*.apk.tmp && mkdir -p $OUT/classes $OUT/gen/com/shrey/usagedump
 
-# A debug keystore, generated once. The APK only ever runs on your own phone.
-# A new keystore cannot update an APK signed by another one: uninstall first.
+# The signing key, generated once. The APK only ever runs on your own phone.
+# A new key cannot update an APK signed by another one -- the phone would need
+# an uninstall and setup all over again -- so restore the backup first
+# (WINDOWS.md, "The signing key") rather than let this make a new one.
 if [ ! -f debug.keystore ]; then
+  echo "note: no android/debug.keystore -- generating a NEW key; it cannot update the installed app" >&2
   keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
     -alias debug -keyalg RSA -keysize 2048 -validity 10000 \
     -dname "CN=Usage Dump Debug" >/dev/null 2>&1
@@ -51,7 +54,12 @@ final class Secrets {
 }
 EOF
 
-"$BT/aapt2" link -I "$ANDROID_JAR" --manifest AndroidManifest.xml -o $OUT/base.apk
+# Release by default. DEBUGGABLE=1 adds android:debuggable, which lets
+# `adb shell run-as` read the app's private files -- useful for testing, but
+# that includes the Drive refresh token, so never for the phone in daily use.
+DEBUG_FLAG=""
+if [ "${DEBUGGABLE:-0}" = "1" ]; then DEBUG_FLAG="--debug-mode"; echo "note: DEBUGGABLE build"; fi
+"$BT/aapt2" link -I "$ANDROID_JAR" --manifest AndroidManifest.xml $DEBUG_FLAG -o $OUT/base.apk
 javac -source 8 -target 8 -nowarn -Xlint:-options -bootclasspath "$ANDROID_JAR:$BT/core-lambda-stubs.jar" -classpath "$ANDROID_JAR" \
   -d $OUT/classes $(find src $OUT/gen -name '*.java')
 "$BT/d8" --lib "$ANDROID_JAR" --min-api 26 --output $OUT $(find $OUT/classes -name '*.class')

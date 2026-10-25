@@ -1,6 +1,6 @@
 # Drive upload: one-time setup
 
-The app uploads to `My Drive/PhoneUsageInbox/` with its own Google OAuth
+The app uploads to `My Drive/PhoneUsage/phone/` with its own Google OAuth
 client. That needs a (free) Google Cloud project, created once. About 15
 minutes.
 

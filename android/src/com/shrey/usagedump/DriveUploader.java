@@ -19,7 +19,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Mirrors the collector's folder into My Drive/PhoneUsageInbox/.
+ * Mirrors the collector's folder into My Drive/PhoneUsage/phone/.
+ *
+ * PhoneUsage is the project's one folder in Drive -- the computer keeps its
+ * archive and code beside phone/ -- and the app creates it, because drive.file
+ * can only write into folders the app made. The first layout uploaded to a
+ * top-level PhoneUsageInbox; that folder is moved in and renamed, not copied.
  *
  * Only files whose mtime or size changed since their last upload are sent, so a
  * run normally uploads today's events and snapshots and device.json. Drive
@@ -29,7 +34,10 @@ import java.util.Map;
 final class DriveUploader {
     private DriveUploader() {}
 
-    static final String INBOX = "PhoneUsageInbox";
+    static final String TOP = "PhoneUsage";
+    static final String INBOX = "phone";
+    private static final String LEGACY_INBOX = "PhoneUsageInbox";
+    static final String SHOWN_PATH = "My Drive/" + TOP + "/" + INBOX;
     private static final String[] SUBDIRS = {"events", "snapshots"};
     private static final String FOLDER_MIME = "application/vnd.google-apps.folder";
     private static final String API = "https://www.googleapis.com/drive/v3/files";
@@ -108,6 +116,16 @@ final class DriveUploader {
             int sent = 0, failed = 0;
             String lastError = null;
             try {
+                // Settle the folder layout before anything else, so an upload of
+                // already-known files (which never asks for a folder) still moves
+                // the first layout's top-level folder into PhoneUsage.
+                if (!State.get(c).getBoolean(State.LAYOUT_V2, false)) {
+                    try {
+                        s.folder("");
+                    } catch (IOException e) {
+                        return new Result(Outcome.FAILED, "Drive folder: " + e.getMessage());
+                    }
+                }
                 for (String rel : localFiles(root)) {
                     if (upToDate(State.get(c), root, rel)) continue;
                     try {
@@ -172,29 +190,74 @@ final class DriveUploader {
             p.edit().putString(State.UPLOADED_PREFIX + rel, newId + "|" + mtime + "|" + size).apply();
         }
 
-        /** Drive id of PhoneUsageInbox ("") or one of its subfolders, created if missing. */
+        /** Drive id of the inbox ("") or one of its subfolders, created if missing. */
         String folder(String dir) throws IOException, RetryException, DriveAuth.AuthException {
             String key = State.FOLDER_PREFIX + dir;
             String id = p.getString(key, null);
-            if (id != null) return id;
-            String parent = dir.isEmpty() ? "root" : folder("");
-            String name = dir.isEmpty() ? INBOX : dir;
-            id = findFolder(parent, name);
-            if (id == null) {
-                JSONObject meta = new JSONObject();
-                try {
-                    meta.put("name", name).put("mimeType", FOLDER_MIME)
-                            .put("parents", new JSONArray().put(parent));
-                } catch (JSONException e) {
-                    throw new IOException(e);
-                }
-                Http.Response r = call("POST", API + "?fields=id", "application/json; charset=UTF-8",
-                        meta.toString().getBytes("UTF-8"));
-                if (!r.ok()) throw new IOException("create folder " + name + ": " + r.code + " " + r.body);
-                id = parse(r).optString("id");
+            if (dir.isEmpty()) {
+                if (id != null && p.getBoolean(State.LAYOUT_V2, false)) return id;
+                id = inbox(id);
+                p.edit().putString(key, id).putBoolean(State.LAYOUT_V2, true).apply();
+                return id;
             }
+            if (id != null) return id;
+            String parent = folder("");
+            id = findFolder(parent, dir);
+            if (id == null) id = createFolder(parent, dir);
             p.edit().putString(key, id).apply();
             return id;
+        }
+
+        /**
+         * PhoneUsage/phone, found, created, or moved in from the first layout's
+         * top-level PhoneUsageInbox -- the same Drive folder either way, so its
+         * files keep their ids and nothing is uploaded twice.
+         */
+        private String inbox(String known) throws IOException, RetryException, DriveAuth.AuthException {
+            String top = p.getString(State.FOLDER_PREFIX + "@top", null);
+            if (top == null) {
+                top = findFolder("root", TOP);
+                if (top == null) top = createFolder("root", TOP);
+                p.edit().putString(State.FOLDER_PREFIX + "@top", top).apply();
+            }
+            String id = findFolder(top, INBOX);
+            if (id != null) return id;
+            String legacy = known != null ? known : findFolder("root", LEGACY_INBOX);
+            if (legacy != null) {
+                Http.Response r = call("GET", API + "/" + legacy + "?fields=parents", null, null);
+                if (r.ok()) {
+                    JSONArray parents = parse(r).optJSONArray("parents");
+                    StringBuilder remove = new StringBuilder();
+                    for (int i = 0; parents != null && i < parents.length(); i++) {
+                        if (remove.length() > 0) remove.append(',');
+                        remove.append(parents.optString(i));
+                    }
+                    Http.Response m = call("PATCH", API + "/" + legacy + "?fields=id&addParents=" + top
+                            + "&removeParents=" + Http.enc(remove.toString()),
+                            "application/json; charset=UTF-8",
+                            ("{\"name\":\"" + INBOX + "\"}").getBytes("UTF-8"));
+                    if (!m.ok()) throw new IOException("move inbox: " + m.code + " " + m.body);
+                    Log.i(Collector.TAG, "moved " + LEGACY_INBOX + " to " + SHOWN_PATH);
+                    return legacy;
+                }
+                if (r.code != 404) throw new IOException("read inbox: " + r.code + " " + r.body);
+            }
+            return createFolder(top, INBOX);
+        }
+
+        private String createFolder(String parent, String name)
+                throws IOException, RetryException, DriveAuth.AuthException {
+            JSONObject meta = new JSONObject();
+            try {
+                meta.put("name", name).put("mimeType", FOLDER_MIME)
+                        .put("parents", new JSONArray().put(parent));
+            } catch (JSONException e) {
+                throw new IOException(e);
+            }
+            Http.Response r = call("POST", API + "?fields=id", "application/json; charset=UTF-8",
+                    meta.toString().getBytes("UTF-8"));
+            if (!r.ok()) throw new IOException("create folder " + name + ": " + r.code + " " + r.body);
+            return parse(r).optString("id");
         }
 
         private String findFolder(String parent, String name)

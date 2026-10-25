@@ -126,7 +126,8 @@ final class DriveAuth {
         for (String k : p.getAll().keySet()) {
             if (k.startsWith(State.FOLDER_PREFIX) || k.startsWith(State.UPLOADED_PREFIX)) e.remove(k);
         }
-        e.remove(State.REFRESH_TOKEN).remove(State.ACCESS_TOKEN).remove(State.NEEDS_RECONNECT).apply();
+        e.remove(State.REFRESH_TOKEN).remove(State.ACCESS_TOKEN).remove(State.NEEDS_RECONNECT)
+                .remove(State.LAYOUT_V2).apply();
         if (refresh != null) {
             try {
                 Http.postForm(REVOKE_URL, "token", refresh);

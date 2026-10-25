@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.shrey.usagedump"
-    android:versionCode="3" android:versionName="2.1">
+    android:versionCode="4" android:versionName="2.2">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -19,8 +19,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Only to show the "allow background" prompt; One UI otherwise skips jobs. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- The one "needs attention" notification (Notifier); asked for at first open. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <application android:label="Usage Dump" android:debuggable="true"
+    <!-- Not debuggable: a debuggable app's private files, the Drive refresh
+         token among them, can be read by anyone with the unlocked phone and a
+         cable (`run-as`). DEBUGGABLE=1 bash build.sh makes one for testing. -->
+    <application android:label="Usage Dump"
                  android:allowBackup="false"
                  android:theme="@android:style/Theme.DeviceDefault.Light">
         <activity android:name=".DumpActivity" android:exported="true">
@@ -29,6 +34,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver android:name=".ScheduleReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <service android:name=".CollectorJob"
                  android:permission="android.permission.BIND_JOB_SERVICE"
                  android:exported="false" />

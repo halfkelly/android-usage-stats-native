@@ -68,6 +68,7 @@ public class CollectorJob extends JobService {
         }
         State.note(c, State.LAST_COLLECT_AT, State.LAST_COLLECT_RESULT, result);
         requestUpload(c);
+        notifySafely(c);
         return result;
     }
 
@@ -75,8 +76,21 @@ public class CollectorJob extends JobService {
         DriveUploader.Result r = DriveUploader.uploadAll(c, new Collector(c).root());
         String note = r.outcome == DriveUploader.Outcome.RETRY ? r.message + " (will retry)" : r.message;
         State.note(c, State.LAST_UPLOAD_AT, State.LAST_UPLOAD_RESULT, note);
+        if (r.outcome == DriveUploader.Outcome.OK) {
+            State.get(c).edit().putLong(State.LAST_UPLOAD_OK_MS, System.currentTimeMillis()).apply();
+        }
         Log.i(Collector.TAG, "upload " + r.outcome + " " + r.message);
+        notifySafely(c);
         return r;
+    }
+
+    /** The warning must never be what breaks a run. */
+    static void notifySafely(Context c) {
+        try {
+            Notifier.check(c);
+        } catch (RuntimeException e) {
+            Log.e(Collector.TAG, "notification check failed", e);
+        }
     }
 
     @Override

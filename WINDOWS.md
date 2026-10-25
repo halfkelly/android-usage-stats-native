@@ -40,6 +40,14 @@ bash android/build.sh
   git**. Keep it: an APK signed with a different key can't update the
   installed app, which means an uninstall and a fresh grant of usage access
   and Drive.
+- **Installing over a cable without sudo:** use a *Windows* adb, not WSL's.
+  Windows already has a driver for the phone, so there's no usbipd and no
+  root adb server. Unzip
+  `https://dl.google.com/android/repository/platform-tools-latest-windows.zip`
+  into `tools/platform-tools-win/`, `chmod +x` its `.exe` files, then
+  `tools/platform-tools-win/adb.exe install 'C:\path\to\usagedump.apk'`
+  (Windows paths only; copy the APK under `/mnt/c` first). If usbipd has the
+  phone attached to WSL, run `usbipd.exe detach --busid <id>` first.
 - `android/oauth.properties` (also not in git) holds the Drive OAuth client;
   see `android/DRIVE_SETUP.md`. Without it the build still works, the app just
   can't upload.

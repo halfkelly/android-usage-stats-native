@@ -43,7 +43,7 @@ If the phone stops uploading, the phone shows a notification (usage access
 off, Drive sign-in expired, nothing uploaded for a day). The dashboard, `where`
 and `ingest-phone` also warn once it has been quiet for a day.
 
-The Windows task **PhoneUsageAutosync** runs `autosync.sh` at 15:00 and 21:00:
+The Windows task **PhoneUsageAutosync** runs `autosync.sh` at 03:00, 09:00, 15:00 and 21:00:
 it imports the archive and ingests the phone's uploads, so the dashboard is
 current even if you never press anything.
 

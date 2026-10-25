@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from . import pickups
 from .parse import Event, foreground_sessions
 
 # Only these are needed to rebuild sessions; the rest are stored anyway because
@@ -50,7 +51,7 @@ def backup_db(conn: sqlite3.Connection) -> Path | None:
 
 
 def rebuild(conn: sqlite3.Connection, from_ms: int, until_ms: int | None = None) -> list[str]:
-    """Recompute sessions and hourly slices for every local day from `from_ms`.
+    """Recompute sessions, hourly slices and pick-ups for every local day from `from_ms`.
 
     Days are rebuilt whole: events are re-read from the database (not just the
     dump), so a day that was ingested across several syncs still comes out
@@ -75,10 +76,25 @@ def rebuild(conn: sqlite3.Connection, from_ms: int, until_ms: int | None = None)
 
     split = _split_by_hour(sessions)
 
+    # Pick-ups need notifications too, which sessions do not, so their own read.
+    rows = conn.execute(
+        "SELECT ts_ms, type, package FROM events WHERE ts_ms >= ? AND ts_ms <= ? AND type IN (%s)"
+        % ",".join("?" * len(pickups.TYPES)),
+        (replace_from - LOOKBACK_MS, until_ms, *pickups.TYPES),
+    ).fetchall()
+    picked = [r for r in pickups.build([Event(r[0], r[1], r[2]) for r in rows])
+              if r["start_ms"] >= replace_from]
+
     last_day = datetime.fromtimestamp(until_ms / 1000).date()
     conn.execute("BEGIN")
     conn.execute("DELETE FROM sessions WHERE day >= ? AND day <= ?", (str(first_day), str(last_day)))
     conn.execute("DELETE FROM usage_slice WHERE day >= ? AND day <= ?", (str(first_day), str(last_day)))
+    conn.execute("DELETE FROM pickups WHERE day >= ? AND day <= ?", (str(first_day), str(last_day)))
+    conn.executemany(
+        "INSERT OR REPLACE INTO pickups (%s) VALUES (%s)"
+        % (", ".join(pickups.FIELDS), ", ".join("?" * len(pickups.FIELDS))),
+        [tuple(r[f] for f in pickups.FIELDS) for r in picked],
+    )
     conn.executemany(
         "INSERT OR REPLACE INTO sessions (day, package, start_ms, end_ms) VALUES (?, ?, ?, ?)",
         [(day_str(a), p, a, b) for p, a, b in _split_by_day(sessions)],

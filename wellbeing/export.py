@@ -249,13 +249,28 @@ def export_all(conn: sqlite3.Connection, start: str, end: str,
         out_dir / "app_daily.csv",
         ["day", "app", "package", "ms", "opens", "longest_session_ms", "first_use",
          "last_use", "foreground_service_ms", "notifications", "notifications_seen",
-         "interactions"],
+         "interactions", "pickups_started", "micro_pickups", "impulse_pickups"],
         stats.app_daily_full(conn, start, end), key=("day", "package"), richer="ms",
     )
 
     written["app_hourly.csv"] = _merge(
         out_dir / "app_hourly.csv", ["day", "hour", "app", "package", "ms"],
         stats.app_hourly(conn, start, end), key=("day", "hour", "package"), richer="ms",
+    )
+
+    # --- pick-ups: one row each, and per day --------------------------------
+    written["pickups.csv"] = _merge(
+        out_dir / "pickups.csv",
+        ["day", "time", "start_at", "unlock_at", "end_at", "duration_ms", "unlocked",
+         "first_app", "first_package", "packages", "trigger_app", "trigger_package",
+         "trigger_delay_ms", "micro", "impulse"],
+        stats.pickup_rows(conn, start, end), key=("start_at",), richer="duration_ms",
+    )
+    written["pickup_daily.csv"] = _merge(
+        out_dir / "pickup_daily.csv",
+        ["day", "pickups", "glances", "micro", "impulse", "impulse_micro", "pickup_ms",
+         "glance_ms"],
+        stats.pickup_daily(conn, start, end), key=("day",), richer="pickups",
     )
 
     # --- the phone's own per-app buckets, every interval and window ---------

@@ -81,6 +81,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             },
             "pickups": stats.notification_pickups(c, start, end, exclude=excluded),
             "pickup_quality": stats.pickup_quality(c, start, end),
+            "pickup_summary": stats.pickup_summary(c, start, end, exclude=excluded),
         })
 
     @app.get("/api/app/<package>")

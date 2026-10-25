@@ -198,6 +198,22 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
   </div>
 
   <div class="card">
+    <h2>Pick-ups</h2>
+    <p class="note">Each time the screen came on. A <b>pick-up</b> was unlocked; a <b>glance</b>
+      wasn't. <b>Impulse</b>: no notification in the 2 minutes before the unlock.
+      <b>Micro</b>: put down again within 30 seconds.</p>
+    <div class="tiles" id="pk-tiles"></div>
+    <h2 style="font-size:13px;margin:4px 0 10px">Pick-ups per day</h2>
+    <div id="pk-daily"></div>
+    <h2 style="font-size:13px;margin:22px 0 10px">How long each pick-up lasted</h2>
+    <div id="pk-bands"></div>
+    <h2 style="font-size:13px;margin:22px 0 10px">Pick-ups by hour</h2>
+    <div id="pk-hours"></div>
+    <h2 style="font-size:13px;margin:22px 0 10px">Where pick-ups lead</h2>
+    <div id="pk-apps"></div>
+  </div>
+
+  <div class="card">
     <details>
       <summary>Table view</summary>
       <div id="tbl" style="margin-top:12px"></div>
@@ -403,6 +419,45 @@ function drawTiles(d) {
     `<div class="tile"><div class="row-k">${label}</div><div class="cells">` +
     cells.map(([v, m]) => `<div class="cell"><div class="v">${v}</div><div class="m">${m}</div></div>`).join("") +
     `</div></div>`).join("");
+}
+
+function drawPickups(p) {
+  if (!p) return;
+  const num = v => Math.round(v).toLocaleString();
+  const n = Math.max(1, p.daily.length);
+  document.getElementById("pk-tiles").innerHTML = [
+    [p.per_day, "pick-ups a day", `${num(p.pickups)} in total`],
+    [p.pct_impulse + "%", "on impulse", `${num(p.impulse)} with no notification`],
+    [p.pct_micro + "%", "micro", `${num(p.micro)} under 30s · ${num(p.impulse_micro)} also impulse`],
+    [fmtSec(p.median_ms), "typical pick-up", `half between ${fmtSec(p.p25_ms)} and ${fmtSec(p.p75_ms)}`],
+    [num(p.glances / n), "glances a day", "screen on, never unlocked"],
+  ].map(([v, k, m]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="m">${m}</div></div>`).join("");
+
+  barChart(document.getElementById("pk-daily"), p.daily.map(r => ({
+    label: dayLabel(r.day), v: r.pickups,
+    tip: `<b>${dayLabel(r.day)}</b><br>${r.pickups} pick-ups · ${r.glances} glances` +
+         `<br>${r.impulse} impulse · ${r.micro} micro · ${r.impulse_micro} both` +
+         `<br>${fmt(r.pickup_ms)} unlocked in total`,
+  })), { unit: "count" });
+  barChart(document.getElementById("pk-bands"), p.bands.map(b => ({
+    label: b.band, v: b.count,
+    tip: `<b>${b.band}</b><br>${b.count} pick-ups · ${p.pickups ? Math.round(100 * b.count / p.pickups) : 0}%`,
+  })), { unit: "count", height: 150 });
+  barChart(document.getElementById("pk-hours"), p.by_hour.map(h => ({
+    label: h.hour === 0 ? "12a" : h.hour < 12 ? h.hour + "a" : h.hour === 12 ? "12p" : (h.hour - 12) + "p",
+    v: h.pickups / n,
+    tip: `<b>${String(h.hour).padStart(2, "0")}:00</b><br>${(h.pickups / n).toFixed(1)} pick-ups a day` +
+         `<br>${h.pickups ? Math.round(100 * h.impulse / h.pickups) : 0}% on impulse`,
+  })), { unit: "count", height: 150 });
+
+  const list = (rows, key, what) => rows.length
+    ? rows.map(a => `<tr><td>${a.label}</td><td class="n">${a[key]}</td><td class="n">${a.pickups}</td>
+        <td class="n">${Math.round(100 * a[key] / a.pickups)}%</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">No ${what} pick-ups in this range.</td></tr>`;
+  const head = k => `<thead><tr><th>First app opened</th><th class="n">${k}</th><th class="n">All pick-ups</th><th class="n">Share</th></tr></thead>`;
+  document.getElementById("pk-apps").innerHTML =
+    `<table>${head("Impulse")}<tbody>${list(p.top_impulse, "impulse", "impulse")}</tbody></table>` +
+    `<table style="margin-top:14px">${head("Micro")}<tbody>${list(p.top_micro, "micro", "micro")}</tbody></table>`;
 }
 
 function drawTable(d) {
@@ -614,6 +669,7 @@ function render() {
   safe("exclude", () => { renderExclude(d.app_choices, d.excluded_apps); });
   safe("blocks", () => { drawBlocks(document.getElementById("c-blocks"), d.day_blocks); });
   safe("hours", () => { drawHourProfile(document.getElementById("c-hourprofile"), d.hourly, d.totals.active_days); });
+  safe("pickups", () => { drawPickups(d.pickup_summary); });
   safe("table", () => { drawTable(d); });
   // WhatsApp dominates this phone's usage, so the drill-down opens on it rather
   // than waiting for a click; any other app replaces it.

@@ -2,7 +2,7 @@
 
 The phone only keeps 24h of events and rolling interval buckets, so a sync
 appends into this database and nothing the phone forgets is lost. Derived
-tables (`sessions`, `usage_slice`) are rebuilt from `events` for whatever
+tables (`sessions`, `usage_slice`, `pickups`) are rebuilt from `events` for whatever
 window a sync touched, so `events` stays the single source of truth.
 """
 from __future__ import annotations
@@ -44,6 +44,23 @@ CREATE TABLE IF NOT EXISTS usage_slice (
     ms      INTEGER NOT NULL,
     PRIMARY KEY (day, hour, package)
 ) WITHOUT ROWID;
+
+-- one screen-on stretch: glance or pick-up, how long, what for (see pickups.py)
+CREATE TABLE IF NOT EXISTS pickups (
+    day              TEXT NOT NULL,
+    start_ms         INTEGER PRIMARY KEY,
+    unlock_ms        INTEGER,
+    end_ms           INTEGER NOT NULL,
+    duration_ms      INTEGER NOT NULL,
+    unlocked         INTEGER NOT NULL,
+    first_package    TEXT NOT NULL DEFAULT '',
+    packages         TEXT NOT NULL DEFAULT '',
+    trigger_package  TEXT NOT NULL DEFAULT '',
+    trigger_delay_ms INTEGER,
+    micro            INTEGER NOT NULL,
+    impulse          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS pickups_day ON pickups (day);
 
 -- the phone's own rolling buckets, kept for cross-checking and day-one display
 CREATE TABLE IF NOT EXISTS interval_stats (

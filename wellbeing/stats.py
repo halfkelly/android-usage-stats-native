@@ -582,8 +582,14 @@ def app_daily_full(conn: sqlite3.Connection, start: str, end: str) -> list[dict]
                 GROUP BY day, package, type""",
             (NOTIFICATION_EVENT, "NOTIFICATION_SEEN", INTERACTION_EVENT, start, end))
     }
+    picks = {
+        (r["day"], r["first_package"]): r for r in conn.execute(
+            """SELECT day, first_package, COUNT(*) AS n, SUM(micro) AS micro, SUM(impulse) AS impulse
+               FROM pickups WHERE unlocked = 1 AND first_package != '' AND day BETWEEN ? AND ?
+               GROUP BY day, first_package""", (start, end))
+    }
     keys = set(usage) | set(sess) | {(d, p) for (d, p) in fs}
-    keys |= {(d, p) for (d, p, _t) in counts}
+    keys |= {(d, p) for (d, p, _t) in counts} | set(picks)
     out = []
     for day, pkg in sorted(keys):
         sv = sess.get((day, pkg))
@@ -600,6 +606,9 @@ def app_daily_full(conn: sqlite3.Connection, start: str, end: str) -> list[dict]
             "notifications": counts.get((day, pkg, NOTIFICATION_EVENT), 0),
             "notifications_seen": counts.get((day, pkg, "NOTIFICATION_SEEN"), 0),
             "interactions": counts.get((day, pkg, INTERACTION_EVENT), 0),
+            "pickups_started": picks[(day, pkg)]["n"] if (day, pkg) in picks else 0,
+            "micro_pickups": picks[(day, pkg)]["micro"] if (day, pkg) in picks else 0,
+            "impulse_pickups": picks[(day, pkg)]["impulse"] if (day, pkg) in picks else 0,
         })
     return out
 
@@ -785,3 +794,116 @@ def day_blocks(conn: sqlite3.Connection, start: str, end: str,
          "share": round(100 * totals[name] / grand, 1)}
         for name, lo, hi in DAY_BLOCKS
     ]
+
+
+# Duration bands for the pick-up histogram, upper bounds in ms.
+PICKUP_BANDS = (("<10s", 10_000), ("10-30s", 30_000), ("30s-1m", 60_000), ("1-3m", 180_000),
+                ("3-10m", 600_000), ("10-30m", 1_800_000), ("30m+", None))
+
+
+def _quantile(sorted_vals: list[int], q: float) -> int:
+    if not sorted_vals:
+        return 0
+    return sorted_vals[min(len(sorted_vals) - 1, int(q * len(sorted_vals)))]
+
+
+def pickup_daily(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
+    """One row per day: glances, pick-ups and their kinds, and time spent in them.
+
+    Only counts and sums, which can only grow as more of a day arrives -- the
+    archive merge never lets a number go down, so a median has no place here.
+    """
+    return [dict(r) for r in conn.execute(
+        """SELECT day,
+                  SUM(unlocked) AS pickups,
+                  SUM(1 - unlocked) AS glances,
+                  SUM(micro) AS micro,
+                  SUM(impulse) AS impulse,
+                  SUM(micro * impulse) AS impulse_micro,
+                  SUM(CASE WHEN unlocked = 1 THEN duration_ms ELSE 0 END) AS pickup_ms,
+                  SUM(CASE WHEN unlocked = 0 THEN duration_ms ELSE 0 END) AS glance_ms
+           FROM pickups WHERE day BETWEEN ? AND ? GROUP BY day ORDER BY day""",
+        (start, end))]
+
+
+def pickup_rows(conn: sqlite3.Connection, start: str, end: str) -> list[dict]:
+    labels = {r["package"]: r["label"] for r in conn.execute("SELECT package, label FROM apps")}
+    out = []
+    for r in conn.execute("SELECT * FROM pickups WHERE day BETWEEN ? AND ? ORDER BY start_ms",
+                          (start, end)):
+        row = dict(r)
+        row["start_at"] = row.pop("start_ms")
+        row["unlock_at"] = row.pop("unlock_ms")
+        row["end_at"] = row.pop("end_ms")
+        row["time"] = datetime.fromtimestamp(row["start_at"] / 1000).strftime("%H:%M:%S")
+        row["first_app"] = labels.get(row["first_package"], row["first_package"])
+        row["trigger_app"] = labels.get(row["trigger_package"], row["trigger_package"])
+        out.append(row)
+    return out
+
+
+def pickup_summary(conn: sqlite3.Connection, start: str, end: str, exclude=()) -> dict:
+    """Everything the dashboard's Pick-ups section shows, for a date range.
+
+    Every pick-up counts, whatever app it led to -- the phone was picked up.
+    `exclude` only removes apps from the per-app lists.
+    """
+    rows = conn.execute(
+        """SELECT day, start_ms, duration_ms, unlocked, first_package, micro, impulse
+           FROM pickups WHERE day BETWEEN ? AND ?""", (start, end)).fetchall()
+    ups = [r for r in rows if r["unlocked"]]
+    durations = sorted(r["duration_ms"] for r in ups)
+    days = sorted({r["day"] for r in rows})
+    n_days = len(days) or 1
+
+    bands = []
+    lo = 0
+    for name, hi in PICKUP_BANDS:
+        n = sum(1 for d in durations if d >= lo and (hi is None or d < hi))
+        bands.append({"band": name, "count": n})
+        lo = hi or lo
+
+    by_hour = [{"hour": h, "pickups": 0, "impulse": 0} for h in range(24)]
+    for r in ups:
+        h = datetime.fromtimestamp(r["start_ms"] / 1000).hour
+        by_hour[h]["pickups"] += 1
+        by_hour[h]["impulse"] += r["impulse"]
+
+    labels = {r["package"]: r["label"] for r in conn.execute("SELECT package, label FROM apps")}
+    skip = set(exclude)
+    per_app: dict[str, dict] = {}
+    for r in ups:
+        pkg = r["first_package"]
+        if not pkg or pkg in skip:
+            continue
+        a = per_app.setdefault(pkg, {"package": pkg, "label": labels.get(pkg, pkg),
+                                     "pickups": 0, "impulse": 0, "micro": 0, "impulse_micro": 0})
+        a["pickups"] += 1
+        a["impulse"] += r["impulse"]
+        a["micro"] += r["micro"]
+        a["impulse_micro"] += r["micro"] * r["impulse"]
+
+    def top(key):
+        return sorted((a for a in per_app.values() if a[key]), key=lambda a: -a[key])[:10]
+
+    total = len(ups)
+    impulse = sum(r["impulse"] for r in ups)
+    micro = sum(r["micro"] for r in ups)
+    return {
+        "pickups": total,
+        "glances": len(rows) - total,
+        "micro": micro,
+        "impulse": impulse,
+        "impulse_micro": sum(r["micro"] * r["impulse"] for r in ups),
+        "per_day": round(total / n_days, 1),
+        "pct_impulse": round(100 * impulse / total) if total else 0,
+        "pct_micro": round(100 * micro / total) if total else 0,
+        "median_ms": _quantile(durations, 0.5),
+        "p25_ms": _quantile(durations, 0.25),
+        "p75_ms": _quantile(durations, 0.75),
+        "bands": bands,
+        "by_hour": by_hour,
+        "daily": pickup_daily(conn, start, end),
+        "top_impulse": top("impulse"),
+        "top_micro": top("micro"),
+    }

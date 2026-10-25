@@ -53,7 +53,12 @@ if ! "$ADB" devices 2>/dev/null | grep -qw device; then
   exit 1
 fi
 
-"$PY" -m wellbeing deep-sync || "$PY" -m wellbeing sync
+if ! { "$PY" -m wellbeing deep-sync || "$PY" -m wellbeing sync; }; then
+  echo ""
+  echo "  ✗ The phone capture failed or was refused (see above); the archive was not touched."
+  echo ""
+  exit 1
+fi
 "$PY" -m wellbeing export
 
 echo ""

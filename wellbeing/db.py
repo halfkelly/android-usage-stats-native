@@ -180,6 +180,46 @@ def insert_events(conn: sqlite3.Connection, events) -> int:
     return conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] - before
 
 
+class OverlapError(ValueError):
+    """A phone capture tried to add a mass of events to time already covered."""
+
+
+# A capture from the phone should add events after the newest one stored, plus
+# at most a handful inside it. On 2026-10-01 a sync added 61,667 copies of
+# already-archived events, every one 2,375 ms late: Android had shifted its whole
+# stored history after a clock correction, so no timestamp matched and every
+# COUNT(*) metric doubled in the shared archive. Anything above this is refused.
+OVERLAP_LIMIT = 100
+
+
+def insert_phone_events(conn: sqlite3.Connection, events) -> int:
+    """insert_events for a capture from the phone, refusing one that rewrites history.
+
+    `import` from the archive legitimately fills the past and uses insert_events
+    directly; a phone capture never should, so it is checked and rolled back.
+    """
+    prior_max = conn.execute("SELECT MAX(ts_ms) FROM events").fetchone()[0]
+    if prior_max is None:
+        return insert_events(conn, events)
+    count_old = "SELECT COUNT(*) FROM events WHERE ts_ms <= ?"
+    before = conn.execute(count_old, (prior_max,)).fetchone()[0]
+    conn.execute("SAVEPOINT phone_events")
+    try:
+        added = insert_events(conn, events)
+        into_past = conn.execute(count_old, (prior_max,)).fetchone()[0] - before
+        if into_past > OVERLAP_LIMIT:
+            raise OverlapError(
+                f"refusing: this capture would add {into_past:,} events to time already "
+                f"stored (limit {OVERLAP_LIMIT}). The phone's timestamps have probably "
+                f"shifted; nothing was written.")
+    except BaseException:
+        conn.execute("ROLLBACK TO phone_events")
+        conn.execute("RELEASE phone_events")
+        raise
+    conn.execute("RELEASE phone_events")
+    return added
+
+
 def _drop_duplicate_sources(conn: sqlite3.Connection, lo: int, hi: int) -> int:
     """Remove the same real event stored twice by the two capture paths.
 

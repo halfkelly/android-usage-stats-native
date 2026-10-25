@@ -80,7 +80,7 @@ def ingest(conn: sqlite3.Connection, text: str, *, device: str = "", android: st
     if not dump.events and not dump.stats:
         raise ValueError("dump contained no usage stats for user 0")
 
-    added = db.insert_events(conn, dump.events)
+    added = db.insert_phone_events(conn, dump.events)
     db.insert_interval_stats(conn, dump.stats)
 
     first_ts = min((e.ts_ms for e in dump.events), default=None)

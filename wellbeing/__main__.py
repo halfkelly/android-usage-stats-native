@@ -97,7 +97,7 @@ def cmd_sync(args) -> int:
             return 2
         result = sync_mod.sync(conn, serial, fetch_labels=args.fetch_labels,
                                keep_raw=not args.no_raw)
-    except adb.AdbError as exc:
+    except (adb.AdbError, db.OverlapError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"{result['device']}: {result['events_seen']} events in dump, "
@@ -146,7 +146,14 @@ def cmd_deep_sync(args) -> int:
     except adb.AdbError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    result = appdump.ingest_files(conn, captured, fetch_labels=args.fetch_labels)
+    try:
+        result = appdump.ingest_files(conn, captured, fetch_labels=args.fetch_labels)
+    except db.OverlapError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if result["clock_shift_ms"]:
+        print(f"the phone's clock moved {result['clock_shift_ms']:+,} ms since the last capture; "
+              f"timestamps realigned to the stored ones")
     print(f"{result['events_seen']:,} events in dump, {result['events_added']:,} new, "
           f"{result['buckets']:,} bucket rows, {result['event_stats']} device counters, "
           f"{result['configs']} configurations")

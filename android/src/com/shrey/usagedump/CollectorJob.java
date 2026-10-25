@@ -35,14 +35,26 @@ public class CollectorJob extends JobService {
                 .build());
     }
 
+    /**
+     * Never throws: this runs at the end of a collect, and an exception here
+     * would crash the process after the files were written -- the job would
+     * never finish, run again, and One UI counts the crashes against the app.
+     * Files stay pending, so the next collect simply asks again.
+     */
     static void requestUpload(Context c) {
         if (!DriveAuth.connected(c)) return;
-        JobScheduler js = c.getSystemService(JobScheduler.class);
-        js.schedule(new JobInfo.Builder(UPLOAD, new ComponentName(c, CollectorJob.class))
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                .setBackoffCriteria(BACKOFF_MS, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
-                .setPersisted(true)
-                .build());
+        try {
+            JobScheduler js = c.getSystemService(JobScheduler.class);
+            js.schedule(new JobInfo.Builder(UPLOAD, new ComponentName(c, CollectorJob.class))
+                    .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                    .setBackoffCriteria(BACKOFF_MS, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
+                    .setPersisted(true)
+                    .build());
+        } catch (RuntimeException e) {
+            Log.e(Collector.TAG, "could not schedule upload", e);
+            State.note(c, State.LAST_UPLOAD_AT, State.LAST_UPLOAD_RESULT,
+                    "not scheduled: " + e.getMessage());
+        }
     }
 
     /** What both the job and the "Run now" button do. Call off the main thread. */
@@ -71,10 +83,16 @@ public class CollectorJob extends JobService {
     public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
             boolean retry = false;
-            if (params.getJobId() == COLLECT) {
-                collectNow(this);
-            } else {
-                retry = uploadNow(this).outcome == DriveUploader.Outcome.RETRY;
+            try {
+                if (params.getJobId() == COLLECT) {
+                    collectNow(this);
+                } else {
+                    retry = uploadNow(this).outcome == DriveUploader.Outcome.RETRY;
+                }
+            } catch (RuntimeException e) {
+                // Whatever went wrong, finish the job rather than crash the process.
+                Log.e(Collector.TAG, "job " + params.getJobId() + " failed", e);
+                retry = params.getJobId() == UPLOAD;
             }
             jobFinished(params, retry);
         }, "usagedump-job").start();

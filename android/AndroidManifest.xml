@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.shrey.usagedump"
-    android:versionCode="2" android:versionName="2.0">
+    android:versionCode="3" android:versionName="2.1">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Drive upload (drive.file scope only; see DriveAuth). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required to schedule the upload job with a network constraint; without
+         it JobScheduler throws SecurityException (enforced on Android 14+). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Lets the persisted 6-hourly job survive a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Only to show the "allow background" prompt; One UI otherwise skips jobs. -->

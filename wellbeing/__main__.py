@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import (adb, appdump, archive as archive_mod, codecheck, db, export as export_mod,
                importer as importer_mod, inbox as inbox_mod, stats, sync as sync_mod)
@@ -261,7 +262,12 @@ def cmd_where(args) -> int:
         print(f"inbox:    {inbox or 'no Google Drive'} — nothing from the phone yet")
     else:
         collected = inbox_mod.read_device(inbox).get("collected_at_ms")
-        when = (datetime.fromtimestamp(collected / 1000).strftime("%Y-%m-%d %H:%M")
+        # `where` runs before the zone is pinned, so name it here: WSL's clock is UTC.
+        try:
+            zone = ZoneInfo(archive_mod.archive_timezone())
+        except (archive_mod.TimezoneError, ZoneInfoNotFoundError):
+            zone = None
+        when = (datetime.fromtimestamp(collected / 1000, zone).strftime("%Y-%m-%d %H:%M")
                 if collected else "unknown")
         print(f"inbox:    {inbox} — phone last collected {when}")
     print(f"database: {args.db}")

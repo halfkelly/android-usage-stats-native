@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import time
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -83,6 +84,9 @@ def project_path(root: Path, name: str, legacy: str) -> Path:
     return old if old.is_dir() and not current.is_dir() else current
 
 
+_NOTED_MOVE = False
+
+
 def archive_dir(create: bool = False) -> Path:
     """The archive directory, preferring Drive and falling back to local.
 
@@ -92,6 +96,17 @@ def archive_dir(create: bool = False) -> Path:
     override = os.environ.get(ENV_VAR)
     if override:
         path = Path(override).expanduser()
+        moved = path.parent / PROJECT_FOLDER / FOLDER_NAME
+        if path.name == LEGACY_FOLDER_NAME and not path.exists() and moved.is_dir():
+            # A shell started before the move into PhoneUsage/ still carries the
+            # old value. Only this exact case follows the move: any other missing
+            # override must fail loudly rather than start a second archive.
+            global _NOTED_MOVE
+            if not _NOTED_MOVE:
+                print(f"note: ${ENV_VAR} names the old {path}; using {moved}. "
+                      f"Open a new terminal to pick up the new value.", file=sys.stderr)
+                _NOTED_MOVE = True
+            path = moved
     else:
         root = drive_root()
         path = project_path(root, FOLDER_NAME, LEGACY_FOLDER_NAME) if root else LOCAL_FALLBACK

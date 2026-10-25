@@ -208,3 +208,16 @@ def test_the_project_folder_is_preferred_and_the_old_names_still_found(tmp_path,
     # An archive override at the old top-level name must not put the inbox at My Drive/phone.
     monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(drive / "PhoneUsageBackup"))
     assert inbox.inbox_dir() == drive / "PhoneUsage" / "phone"
+
+
+def test_a_stale_override_follows_only_the_move_into_phoneusage(tmp_path, monkeypatch, capsys):
+    from wellbeing import archive
+    monkeypatch.setattr(archive, "_NOTED_MOVE", False)
+    drive = tmp_path / "My Drive"
+    (drive / "PhoneUsage" / "archive").mkdir(parents=True)
+    monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(drive / "PhoneUsageBackup"))  # moved away
+    assert archive.archive_dir() == drive / "PhoneUsage" / "archive"
+    assert "Open a new terminal" in capsys.readouterr().err
+    # Any other missing override is left alone, to fail loudly downstream.
+    monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(drive / "SomethingElse"))
+    assert archive.archive_dir() == drive / "SomethingElse"

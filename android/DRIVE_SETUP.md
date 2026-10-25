@@ -25,7 +25,11 @@ else in your Drive.
 3. **Data access → Add or remove scopes** → tick
    `.../auth/drive.file` ("See, edit, create, and delete only the specific
    Google Drive files you use with this app") → Update → Save.
-4. **Audience → Publish app** (status becomes **In production**).
+4. **Audience → Publish app** (status becomes **In production**). The button
+   stays greyed out until every required field on the **Branding** page is
+   filled in. Leave the logo empty, because uploading one can trigger a review.
+   To test before that, add your own address under **Audience → Test users**:
+   sign-in works the same, but it expires after 7 days.
 
    **This step matters.** While the app is in "Testing", Google expires the
    sign-in after 7 days and uploads stop. `drive.file` is not a sensitive scope,

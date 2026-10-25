@@ -1,7 +1,7 @@
 # android-usage-stats-native
 
 Digital Wellbeing style usage statistics from a Samsung phone, shown as a
-local dashboard on Windows (WSL). No root. The phone collects and uploads on
+dashboard on the phone itself and on Windows (WSL, in Docker). No root. The phone collects and uploads on
 its own; the computer never needs to connect to it.
 
 ## How it works
@@ -32,42 +32,55 @@ write into folders it made.
 
 Nothing is needed. To see the numbers:
 
-- **Phone Usage Dashboard** on the Desktop (a copy of `Open dashboard.bat`),
-  or `./dashboard.sh`: the page opens in about 3 seconds on what's already
-  here, then checks Drive for the phone's latest uploads in the background and
-  updates itself. **How to read this** explains every figure and assumption;
-  **Stop dashboard** shuts the server down (closing the tab is fine too).
-- To pull in the latest right now: tap **Run now** in the Usage Dump app, give
-  Drive a minute, then click **Get phone data** on the dashboard, or
-  double-click **Sync my phone.bat**.
-- `.venv/bin/python -m wellbeing where` shows when the phone last uploaded.
+- **On the phone:** Usage Dump → **Open dashboard**. The same page, worked out
+  on the phone from its own data (history from when the app was installed).
+- **On the PC:** **Phone Usage Dashboard** on the Desktop (a copy of
+  `Open dashboard.bat`) starts the dashboard container if it isn't running and
+  opens http://127.0.0.1:5000. The page shows what's already here at once, then
+  checks Drive for the phone's latest uploads in the background. **How to read
+  this** explains every figure and assumption.
+- To pull in the latest right now: tap **Run now** in the app, give Drive a
+  minute, then **Get phone data** on the dashboard, or **Sync my phone.bat**.
+- `./wb where` shows when the phone last uploaded.
+
+The dashboard container keeps running until **Stop dashboard.bat** or a
+reboot; closing the tab is fine. The Windows task **PhoneUsageAutosync** runs
+at 03:00, 09:00, 15:00 and 21:00: it starts the dashboard container if needed
+and runs the `sync` container once, which reads the phone's uploads into the
+database and the archive.
 
 If the phone stops uploading, the phone shows a notification (usage access
 off, Drive sign-in expired, nothing uploaded for a day). The dashboard, `where`
 and `ingest-phone` also warn once it has been quiet for a day.
 
-The Windows task **PhoneUsageAutosync** runs `autosync.sh` at 03:00, 09:00, 15:00 and 21:00:
-it imports the archive and ingests the phone's uploads, so the dashboard is
-current even if you never press anything.
-
 ## Setup
 
-### The PC (WSL Ubuntu)
+### The PC (WSL Ubuntu, Docker)
 
 1. **Google Drive for desktop** on Windows, signed in to the same account.
-   Right-click `PhoneUsage` → **Available offline**, so WSL reads don't wait on
-   downloads. WSL sees Drive as `/mnt/g/My Drive`. If not, mount it with
-   `sudo mkdir -p /mnt/g && sudo mount -t drvfs G: /mnt/g`, or set
-   `PHONE_USAGE_ARCHIVE="/mnt/g/My Drive/PhoneUsage/archive"`.
-2. The code, in the Linux home (not under `/mnt/c`):
+   Right-click `PhoneUsage` → **Available offline**, so reads don't wait on
+   downloads. WSL sees it as `/mnt/g/My Drive/PhoneUsage`, which
+   `docker-compose.yml` mounts; if Drive is elsewhere, set `PHONE_USAGE_DRIVE`.
+2. **Docker Engine in WSL**, with systemd on (`/etc/wsl.conf`: `[boot]
+   systemd=true`) and your user in the `docker` group.
+3. The code, in the Linux home (not under `/mnt/c`):
    ```bash
-   sudo apt install -y python3-venv git
    git clone git@github.com:Shrey97/android-usage-stats-native.git ~/android-usage-stats-native
-   cd ~/android-usage-stats-native && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+   cd ~/android-usage-stats-native
+   docker compose build
+   docker compose up -d dashboard
+   ./wb where
    ```
-3. `.venv/bin/python -m wellbeing where` should show the archive in Drive and
-   `timezone: Asia/Kolkata`. Every day and hour is cut in the archive's zone,
-   recorded in `archive.json`, never the machine's clock (WSL runs on UTC).
+   `where` should show the archive and `timezone: Asia/Kolkata`. Every day and
+   hour is cut in the archive's zone, recorded in `archive.json`. An empty
+   `data/` is filled from the archive on the first sync.
+4. The scheduled task (Task Scheduler → PhoneUsageAutosync), action
+   `wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd ~/android-usage-stats-native &&
+   docker compose up -d dashboard && docker compose run --rm sync'`.
+
+What's where: the images hold only code. `data/` (database, its backups, the
+Garmin login, logs) and the Drive folder are mounted in, so rebuilding or
+deleting a container loses nothing.
 
 ### The phone
 
@@ -93,21 +106,16 @@ the sign-in after 7 days. Once published, it lasts.
 
 ## Building the phone app
 
-`bash android/build.sh` builds without Gradle (aapt2 → javac → d8 → zipalign
-→ apksigner). The toolchain lives in `tools/` (gitignored), set up once
-without sudo:
-
 ```bash
-mkdir -p tools/dl && cd tools/dl
-curl -sSfL -o jdk.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
-curl -sSfL -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-cd .. && mkdir -p jdk-linux sdk/cmdline-tools
-tar -xzf dl/jdk.tar.gz -C jdk-linux --strip-components=1
-unzip -q dl/cmdline.zip -d sdk/cmdline-tools && mv sdk/cmdline-tools/cmdline-tools sdk/cmdline-tools/latest
-JAVA_HOME=$PWD/jdk-linux yes | sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD/sdk \
-  "build-tools;34.0.0" "platforms;android-34"
-rm -rf dl && cd ..
+docker compose run --rm apk                  # android/build/usagedump.apk
+docker compose run --rm -e NO_OAUTH=1 apk    # the same, without the client secret
 ```
+
+The `apk` image has JDK 17 and Android build-tools 34; `android/build.sh`
+builds without Gradle (aapt2 → javac → d8 → zipalign → apksigner) and bundles
+the dashboard page with `android/web/phone.js`, which answers its requests on
+the phone. `android/web/check.html` runs phone.js on the PC so its figures can
+be compared with the Python server's.
 
 - **The signing key.** `android/debug.keystore` signs the app and is not in
   git. Its backup is in `My Drive/PhoneUsage/code/signing/`, with
@@ -117,14 +125,13 @@ rm -rf dl && cd ..
   then setting everything up again). The Google "Android" OAuth client is tied
   to this key's SHA-1 (`E6:6F:DB:DC:…:D9:53`), so a new key also breaks the
   normal sign-in.
-- **Release vs. debuggable.** `bash android/build.sh` builds the everyday app.
-  `DEBUGGABLE=1 bash android/build.sh` builds one whose private files
+- **Release vs. debuggable.** The everyday build is not debuggable.
+  `docker compose run --rm -e DEBUGGABLE=1 apk` builds one whose private files
   `adb shell run-as` can read, which helps testing but exposes the Drive
   token, so put the release build back afterwards. Both use the same key, so
   `install -r` switches between them and keeps every setting.
-- **The APK in git is built without `oauth.properties`**, so it never carries
-  the client secret. The normal sign-in doesn't need it, only the code
-  fallback does.
+- **The APK in git is built with `NO_OAUTH=1`**, so it never carries the client
+  secret. The normal sign-in doesn't need it, only the code fallback does.
 - **Installing over the cable** needs no sudo with a *Windows* adb: unzip
   https://dl.google.com/android/repository/platform-tools-latest-windows.zip
   into `tools/platform-tools-win/`, `chmod +x` its `.exe` files, copy the APK
@@ -176,7 +183,7 @@ assumptions worth knowing.
 
 ## All commands
 
-`.venv/bin/python -m wellbeing <command>`
+`./wb <command>` (runs it in the app's container)
 
 | Command | Does |
 |---|---|
@@ -226,7 +233,7 @@ can always be regenerated with `rebuild`.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -q
+docker compose run --rm sync python -m pytest -q
 ```
 
 They check the invariants the archive must hold (a number never decreases, a

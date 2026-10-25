@@ -45,7 +45,7 @@ def _garth():
     try:
         import garth
     except ImportError as exc:                                   # pragma: no cover
-        raise GarminError("garth is not installed. Run: .venv/bin/pip install garth") from exc
+        raise GarminError("garth is not installed. Rebuild the image: docker compose build") from exc
     return garth
 
 
@@ -79,7 +79,7 @@ def resume():
     garth = _garth()
     if not (TOKEN_DIR / "oauth2_token.json").exists():
         raise GarminError(
-            "Not signed in to Garmin. Run:  .venv/bin/python -m wellbeing garmin-login"
+            "Not signed in to Garmin. Run:  ./wb garmin-login"
         )
     try:
         garth.resume(str(TOKEN_DIR))
@@ -88,7 +88,7 @@ def resume():
     except Exception as exc:
         raise GarminError(
             f"Garmin session could not be resumed ({exc}). Sign in again:  "
-            ".venv/bin/python -m wellbeing garmin-login"
+            "./wb garmin-login"
         ) from exc
     return garth
 

@@ -228,6 +228,7 @@ def test_only_the_dashboard_page_can_stop_the_server(tmp_path, monkeypatch):
     from wellbeing.server import create_app
     started = []
     monkeypatch.setattr(threading, "Timer", lambda *a, **k: type("T", (), {"start": lambda self: started.append(a)})())
+    monkeypatch.delenv("DASHBOARD_ALWAYS_ON", raising=False)
     client = create_app(tmp_path / "u.db").test_client()
     assert client.post("/api/stop").status_code == 403          # e.g. a form on another site
     assert not started
@@ -244,3 +245,11 @@ def test_has_changes_is_false_once_everything_is_ingested(tmp_path):
     assert not inbox.has_changes(conn, root)
     _write(root, "events-2026-10-21.csv", _day(D0 + DAY))
     assert inbox.has_changes(conn, root)
+
+
+def test_in_docker_the_page_cannot_stop_the_dashboard(tmp_path, monkeypatch):
+    """Docker restarts an exited dashboard, so Stop would only bounce it."""
+    from wellbeing.server import create_app
+    monkeypatch.setenv("DASHBOARD_ALWAYS_ON", "1")
+    client = create_app(tmp_path / "u.db").test_client()
+    assert client.post("/api/stop", headers={"X-Dashboard": "1"}).status_code == 409

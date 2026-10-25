@@ -1,0 +1,46 @@
+# android-usage-stats-native on this PC.
+#
+#   docker compose up -d dashboard     the dashboard, http://127.0.0.1:5000
+#   docker compose run --rm sync       read the phone's uploads (what the
+#                                      scheduled task does)
+#   docker compose run --rm apk        build the phone app (android/build.sh)
+#   docker compose run --rm -e NO_OAUTH=1 apk   ...without the client secret (the copy in git)
+#
+# Data stays outside the containers: ./data holds the database, its backups and
+# the Garmin login; the Drive folder holds the phone's uploads and the archive.
+name: android-usage-stats-native
+
+x-app: &app
+  image: android-usage-stats-native:latest
+  build: .
+  volumes:
+    - ./data:/app/data
+    # Google Drive for desktop, as WSL sees it. Override with PHONE_USAGE_DRIVE.
+    - "${PHONE_USAGE_DRIVE:-/mnt/g/My Drive/PhoneUsage}:/drive/PhoneUsage"
+
+services:
+  dashboard:
+    <<: *app
+    ports:
+      - "127.0.0.1:5000:5000"     # this PC only
+    restart: unless-stopped
+
+  sync:
+    <<: *app
+    profiles: ["tools"]           # not started by `up`; run on demand
+    command: ["./autosync.sh"]
+
+  apk:
+    profiles: ["tools"]
+    image: android-usage-stats-native-apk:latest
+    build:
+      context: android
+      dockerfile: Dockerfile
+    user: "1000:1000"
+    working_dir: /src/android
+    environment:
+      NO_OAUTH: "${NO_OAUTH:-0}"
+    volumes:
+      - ./android:/src/android                              # writes android/build/
+      - ./wellbeing/templates:/src/wellbeing/templates:ro   # the dashboard page it bundles
+    command: ["bash", "build.sh"]

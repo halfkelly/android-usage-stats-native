@@ -1,0 +1,9 @@
+# Only code goes into the images; data and toolchains are mounted or fetched.
+.git
+.venv
+tools
+data
+raw
+android
+**/__pycache__
+*.pyc

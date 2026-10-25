@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Run a wellbeing command in the app's container: ./wb where, ./wb report, ...
+cd "$(dirname "$0")" && exec docker compose run --rm sync python -m wellbeing "$@"

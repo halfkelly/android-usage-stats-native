@@ -163,7 +163,7 @@ def cmd_garmin_login(args) -> int:
     if not sys.stdin.isatty():
         print("garmin-login needs an interactive terminal.\n"
               "Open Terminal, cd to this project, and run:\n"
-              "    .venv/bin/python -m wellbeing garmin-login")
+              "    ./wb garmin-login")
         return 1
     email = args.email or input("Garmin email: ").strip()
     password = getpass.getpass("Garmin password (not echoed, not stored): ")

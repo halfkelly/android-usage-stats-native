@@ -75,6 +75,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
                                           include_chrome=include_chrome),
             "coverage": cov,
             "phone_warning": inbox_mod.staleness(inbox_mod.inbox_dir()),
+            # In Docker the dashboard is always on and restarted if it exits,
+            # so the page's Stop button would only bounce it.
+            "can_stop": os.environ.get("DASHBOARD_ALWAYS_ON") != "1",
             "totals": {
                 "ms": sum(d["ms"] for d in daily),
                 "unlocks": sum(d["unlocks"] for d in daily),
@@ -156,6 +159,8 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
         """
         if request.headers.get("X-Dashboard") != "1":
             return jsonify({"ok": False, "error": "not from the dashboard"}), 403
+        if os.environ.get("DASHBOARD_ALWAYS_ON") == "1":
+            return jsonify({"ok": False, "error": "runs in Docker: use Stop dashboard.bat"}), 409
         # Exit just after this response has gone out.
         threading.Timer(0.5, os._exit, args=(0,)).start()
         return jsonify({"ok": True})

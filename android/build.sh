@@ -38,12 +38,18 @@ fi
 
 # The Drive OAuth client (DRIVE_SETUP.md). Kept out of git; without it the app
 # still collects, it just has nothing to sign in with.
+# NO_OAUTH=1 leaves it out on purpose: the APK committed to git is built that
+# way, so it never carries the client secret.
 CLIENT_ID="" CLIENT_SECRET=""
-if [ -f oauth.properties ]; then
+if [ -f oauth.properties ] && [ "${NO_OAUTH:-0}" != "1" ]; then
   CLIENT_ID="$(sed -n 's/^client_id=//p' oauth.properties | tr -d '[:space:]')"
   CLIENT_SECRET="$(sed -n 's/^client_secret=//p' oauth.properties | tr -d '[:space:]')"
 fi
-[ -n "$CLIENT_ID" ] || echo "note: no android/oauth.properties -- building without Drive upload"
+if [ "${NO_OAUTH:-0}" = "1" ]; then
+  echo "note: NO_OAUTH=1 -- building without the client secret (no code sign-in)"
+elif [ -z "$CLIENT_ID" ]; then
+  echo "note: no android/oauth.properties -- building without the code sign-in"
+fi
 cat > $OUT/gen/com/shrey/usagedump/Secrets.java <<EOF
 package com.shrey.usagedump;
 

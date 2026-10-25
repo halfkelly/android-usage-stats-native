@@ -757,6 +757,7 @@ function render() {
       (cov.sync_count == null ? "" : ` from ${cov.sync_count} sync${cov.sync_count === 1 ? "" : "s"}`)
     : "no data yet";
   safe("available", () => drawAvailable(cov.days));
+  document.getElementById("stop").hidden = d.can_stop === false || window.PHONE === true;
   // The phone works unattended, so this is the one place a stopped phone shows up.
   const warn = document.getElementById("phone-warning");
   warn.hidden = !d.phone_warning;

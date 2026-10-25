@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
 
-from . import (adb, archive, db, export as export_mod, importer, inbox as inbox_mod, stats,
+from . import (archive, db, export as export_mod, importer, inbox as inbox_mod, stats,
                sync as sync_mod)
 
 RANGES = {"1": 1, "3": 3, "7": 7, "14": 14, "30": 30, "90": 90}
@@ -108,15 +108,14 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
 
         The phone collects and uploads on its own (android/DRIVE_SETUP.md), so
         nothing here talks to it: this ingests My Drive/PhoneUsage/phone, then exports,
-        exactly like `wellbeing ingest-phone`. The old adb pull is still there
-        as `wellbeing deep-sync`.
+        exactly like `wellbeing ingest-phone`.
         """
         c = conn()
         pulled = None
         try:
             sync_mod.backup_db(c)
-            # Pull in whatever the other machine archived first, so pressing this
-            # converges the dashboard even when the inbox has nothing new.
+            # The archive first, so the database is whole even if the inbox
+            # has nothing new.
             pulled = importer.import_archive(c)
             box = inbox_mod.inbox_dir()
             if box is None or not box.is_dir():
@@ -141,14 +140,5 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             "days": len(cov["days"]),
             "archive_rows_added": sum(added for _total, added in written.values()),
         })
-
-    @app.get("/api/devices")
-    def devices():
-        try:
-            return jsonify({"ok": True, "devices": [
-                {"serial": s, "state": st} for s, st in adb.devices()
-            ]})
-        except adb.AdbError as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 500
 
     return app

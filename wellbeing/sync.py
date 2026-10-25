@@ -1,4 +1,4 @@
-"""Pull a dump off the phone, ingest it, and rebuild the derived tables."""
+"""Rebuild the derived tables (sessions, hourly slices) from stored events."""
 from __future__ import annotations
 
 import sqlite3
@@ -7,11 +7,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import adb, db, labels
-from .parse import Event, foreground_sessions, parse_dump
-
-ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = ROOT / "raw"
+from .parse import Event, foreground_sessions
 
 # Only these are needed to rebuild sessions; the rest are stored anyway because
 # they are cheap and answer questions like "how many notifications today".
@@ -51,59 +47,6 @@ def backup_db(conn: sqlite3.Connection) -> Path | None:
     with sqlite3.connect(dst) as out:
         conn.backup(out)
     return dst
-
-
-def sync(conn: sqlite3.Connection, serial: str | None = None, *,
-         fetch_labels: bool = False, keep_raw: bool = True) -> dict:
-    """Capture from the attached device and ingest. Returns a summary dict."""
-    backup_db(conn)
-    serial = adb.require_device(serial)
-    device = adb.device_name(serial)
-    android = adb.android_release(serial)
-    text = adb.dump_usagestats(serial)
-
-    if keep_raw:
-        RAW_DIR.mkdir(exist_ok=True)
-        stamp = datetime.now().strftime("%Y-%m-%dT%H%M%S")
-        (RAW_DIR / f"dump-{stamp}.txt").write_text(text)
-
-    summary = ingest(conn, text, device=device, android=android, fetch_labels=fetch_labels)
-    summary["device"] = device
-    summary["serial"] = serial
-    return summary
-
-
-def ingest(conn: sqlite3.Connection, text: str, *, device: str = "", android: str = "",
-           fetch_labels: bool = False) -> dict:
-    """Ingest a dump's text. Safe to re-run on the same dump."""
-    dump = parse_dump(text)
-    if not dump.events and not dump.stats:
-        raise ValueError("dump contained no usage stats for user 0")
-
-    added = db.insert_phone_events(conn, dump.events)
-    db.insert_interval_stats(conn, dump.stats)
-
-    first_ts = min((e.ts_ms for e in dump.events), default=None)
-    last_ts = max((e.ts_ms for e in dump.events), default=None)
-    if first_ts is not None:
-        rebuild(conn, first_ts, dump.device_now_ms or last_ts)
-
-    packages = {e.package for e in dump.events if e.package} | {s.package for s in dump.stats}
-    known = {r["package"]: r["label"] for r in conn.execute("SELECT package, label FROM apps")}
-    new_labels = labels.resolve(sorted(packages), known=known, fetch=fetch_labels)
-    db.upsert_labels(conn, new_labels)
-
-    db.record_sync(conn, device=device, android=android, events_seen=len(dump.events),
-                   events_added=added, first_ts_ms=first_ts, last_ts_ms=last_ts)
-
-    return {
-        "events_seen": len(dump.events),
-        "events_added": added,
-        "interval_rows": len(dump.stats),
-        "labels_added": len(new_labels),
-        "range": (first_ts, last_ts),
-        "days": sorted({day_str(t) for t in (first_ts, last_ts) if t}),
-    }
 
 
 def rebuild(conn: sqlite3.Connection, from_ms: int, until_ms: int | None = None) -> list[str]:

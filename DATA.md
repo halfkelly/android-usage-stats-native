@@ -11,7 +11,7 @@ and samples below were taken from the archive on 2026-09-14.
 |---|---|
 | **`My Drive/PhoneUsage/archive/`** | The permanent, shared archive. Append-only: a day that has ever been written stays, even if a database is later lost or rebuilt. Lives in Google Drive, so it is already off-machine and readable from every computer. Falls back to `data/csv/` where Drive isn't installed. Its `archive.json` records the timezone every day and hour is cut in. |
 | **`data/usage.db`** | The working store the dashboard reads — one per machine. Derived: rebuilt from the archive's `events/` with `wellbeing import`. Deliberately *not* in Drive, because a half-synced SQLite file is a corruption risk. A copy is taken to `data/usage.db.bak` before every sync. |
-| **`raw/`** | Exactly what came off the phone. `raw/app/*.csv` is **overwritten every sync**; `raw/dump-*.txt` files accumulate. Not an archive — don't rely on it. |
+| **`My Drive/PhoneUsage/phone/`** | Exactly what the phone uploaded: one `events-YYYY-MM-DD.csv` per day (today's is replaced by a fuller copy each upload), the newest bucket snapshots, and `device.json`. Read by `ingest-phone`; the archive above is what to rely on. |
 
 The phone discards raw events after about 9–10 days. Anything not synced inside
 that window is gone permanently, which is why sync cadence matters more than

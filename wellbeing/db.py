@@ -243,7 +243,7 @@ def _drop_duplicate_sources(conn: sqlite3.Connection, lo: int, hi: int) -> int:
     reports exact milliseconds. The primary key includes ts_ms, so one press of
     the power button lands as two rows and every COUNT(*) metric -- unlocks,
     notifications, interactions -- doubles wherever the two paths cover the same
-    window. `sync.sh` runs `deep-sync || sync`, so any deep-sync failure quietly
+    window. The old `sync.sh` ran `deep-sync || sync`, so any deep-sync failure quietly
     does exactly that. It happened on 2026-09-23: 92 unlocks stored against 56
     real, 407 notifications against 255.
 

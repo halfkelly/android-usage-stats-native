@@ -33,10 +33,9 @@ import java.util.TimeZone;
 /**
  * Dumps everything UsageStatsManager will hand over, as CSV.
  *
- * `dumpsys usagestats` only prints the service's in-memory buckets (24h of
- * events plus the current rolling totals). queryUsageStats/queryEvents read the
- * persisted store behind them, which reaches further back -- but events only
- * about ten days, so the scheduled job writes them out long before that.
+ * queryUsageStats/queryEvents read the phone's persisted usage store: months
+ * of buckets, but events for only about ten days, so the scheduled job writes
+ * them out long before that.
  *
  * Layout under getExternalFilesDir (mirrored as-is into Drive):
  *   events/events-YYYY-MM-DD.csv     one local day, complete once the day is over
@@ -122,20 +121,6 @@ final class Collector {
             State.get(ctx).edit().putLong(State.LAST_COLLECT_MS, now).apply();
             Log.i(TAG, "collect OK " + summary);
             return summary;
-        }
-    }
-
-    /** The original adb path: four flat files that `wellbeing deep-sync` pulls. */
-    String dumpFlat(int days) throws IOException {
-        synchronized (LOCK) {
-            long end = System.currentTimeMillis();
-            long begin = end - days * DAY_MS;
-            int buckets = writeBuckets(new File(root, "buckets.csv"), begin, end);
-            int events = writeEvents(new File(root, "events.csv"), begin, end);
-            int estats = writeEventStats(new File(root, "eventstats.csv"), begin, end);
-            int configs = writeConfigurations(new File(root, "configs.csv"), begin, end);
-            return "buckets=" + buckets + " events=" + events + " eventstats=" + estats
-                    + " configs=" + configs + " dir=" + root;
         }
     }
 
@@ -290,25 +275,6 @@ final class Collector {
                             + lastVisible(s) + "," + lastFs(s) + "," + lastComponent(s) + "\n");
                     rows++;
                 }
-            }
-        } finally {
-            w.close();
-        }
-        return rows;
-    }
-
-    private int writeEvents(File out, long begin, long end) throws IOException {
-        UsageEvents events = usm.queryEvents(begin, end);
-        int rows = 0;
-        Writer w = writer(out);
-        try {
-            w.write("ts_ms,type,package,class\n");
-            UsageEvents.Event e = new UsageEvents.Event();
-            while (events != null && events.hasNextEvent()) {
-                events.getNextEvent(e);
-                w.write(e.getTimeStamp() + "," + e.getEventType() + ","
-                        + csv(e.getPackageName()) + "," + csv(e.getClassName()) + "\n");
-                rows++;
             }
         } finally {
             w.close();

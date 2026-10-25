@@ -15,7 +15,7 @@ import pytest
 os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
 
-from wellbeing import appdump, db
+from wellbeing import appdump, db, inbox
 from wellbeing.parse import Event
 
 T0 = 1_790_000_000_000
@@ -43,13 +43,15 @@ CODES = {v: k for k, v in appdump.EVENT_TYPES.items()}
 
 
 def _write_capture(d, events, bucket_begin):
-    d.mkdir()
-    with (d / "events.csv").open("w", newline="") as fh:
+    """What the phone app uploads: a day file of events and a buckets snapshot."""
+    (d / "events").mkdir(parents=True)
+    (d / "snapshots").mkdir()
+    with (d / "events" / "events-2026-09-21.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["ts_ms", "type", "package", "class"])
         for e in events:
             w.writerow([e.ts_ms, CODES[e.type], e.package, e.klass])
-    with (d / "buckets.csv").open("w", newline="") as fh:
+    with (d / "snapshots" / "buckets-2026-09-21.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["interval", "begin_ms", "end_ms", "package", "total_foreground_ms",
                     "total_visible_ms", "total_fs_ms", "last_used_ms", "last_visible_ms",
@@ -89,13 +91,13 @@ def test_a_shifted_capture_adds_only_what_is_new(tmp_path):
     old = _history(40)
     db.insert_events(conn, old)
     db.insert_interval_stats(conn, appdump.parse_buckets(
-        _write_capture(tmp_path / "first", old, T0 - 1000) / "buckets.csv"))
+        _write_capture(tmp_path / "first", old, T0 - 1000) / "snapshots" / "buckets-2026-09-21.csv"))
     stored = _count(conn)
     unlocks = _count(conn, "SELECT COUNT(*) FROM events WHERE type='KEYGUARD_HIDDEN'")
 
     new = _history(5, start=T0 + 40 * 7 * MIN)
     capture = [Event(e.ts_ms + SHIFT, e.type, e.package, e.klass) for e in old + new]
-    result = appdump.ingest_files(conn, _write_capture(tmp_path / "second", capture, T0 - 1000 + SHIFT))
+    result = inbox.ingest_inbox(conn, _write_capture(tmp_path / "second", capture, T0 - 1000 + SHIFT))
 
     assert result["clock_shift_ms"] == SHIFT
     assert result["events_added"] == len(new)

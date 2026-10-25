@@ -28,9 +28,6 @@ import java.io.File;
  * The status screen: what was collected and uploaded, and the one-time setup
  * (usage access, battery, Drive). The real work runs in CollectorJob; nothing
  * here needs to be opened for collection to happen.
- *
- * Launched by adb with `--ei days N` (`wellbeing deep-sync`, the legacy path)
- * it instead writes the four flat CSVs and exits, as it always did.
  */
 public class DumpActivity extends Activity {
 
@@ -46,10 +43,6 @@ public class DumpActivity extends Activity {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        if (getIntent().hasExtra("days")) {
-            legacyDump(getIntent().getIntExtra("days", Collector.BACKFILL_DAYS));
-            return;
-        }
         setContentView(buildUi());
         CollectorJob.schedule(this);
         if (getIntent().getBooleanExtra(EXTRA_CONNECT, false) && !DriveAuth.connected(this)) {
@@ -61,15 +54,6 @@ public class DumpActivity extends Activity {
                 && checkSelfPermission(POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {POST_NOTIFICATIONS}, 1);
         }
-    }
-
-    private void legacyDump(int days) {
-        try {
-            Log.i(Collector.TAG, "OK " + new Collector(this).dumpFlat(days));
-        } catch (Exception e) {
-            Log.e(Collector.TAG, "FAILED", e);
-        }
-        finish();
     }
 
     @Override

@@ -8,112 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from . import (adb, appdump, archive as archive_mod, db, export as export_mod,
+from . import (archive as archive_mod, db, export as export_mod,
                importer as importer_mod, inbox as inbox_mod, stats, sync as sync_mod)
 
 
 def _fmt(ms: int) -> str:
     m = round(ms / 60000)
     return f"{m // 60}h {m % 60:02d}m" if m >= 60 else f"{m}m"
-
-
-def _check_phone_timezone(serial: str, strict: bool) -> bool:
-    """Compare the phone's zone with the archive's.
-
-    `strict` is for the dumpsys path, whose timestamps are printed in the phone's
-    local time: parsing them in a different zone would store wrong instants in
-    the events archive itself. The companion-app path reports absolute instants,
-    so a mismatch there only deserves a note.
-    """
-    try:
-        phone = adb.phone_timezone(serial)
-    except adb.AdbError:
-        return True
-    pinned = os.environ.get("TZ", "")
-    if not phone or phone == pinned:
-        return True
-    msg = f"phone timezone {phone} differs from the archive's {pinned}"
-    if strict:
-        print(f"error: {msg}. dumpsys prints times in the phone's zone, so this would store "
-              f"wrong timestamps. Use deep-sync, or match the phone's timezone.", file=sys.stderr)
-        return False
-    print(f"note: {msg}; calendar days follow the archive's zone.", file=sys.stderr)
-    return True
-
-
-def cmd_devices(args) -> int:
-    found = adb.devices()
-    if not found:
-        print("No devices attached. Enable Developer options > USB debugging and replug.")
-        return 1
-    for serial, state in found:
-        extra = f"  ({adb.device_name(serial)}, Android {adb.android_release(serial)})" if state == "device" else ""
-        print(f"{serial}\t{state}{extra}")
-    return 0
-
-
-def cmd_connect(args) -> int:
-    """Attach the phone over Wi-Fi, finding it on the network if not told where."""
-    existing = [s for s, state in adb.devices() if state == "device" and ":" in s]
-    if existing and not args.address:
-        print(f"already connected to {existing[0]}")
-        return 0
-
-    addresses = [args.address] if args.address else adb.mdns_services()
-    if not addresses:
-        print("Couldn't find the phone on this network.\n"
-              "  On the phone: Settings > Developer options > Wireless debugging, switch it on.\n"
-              "  If this is a new computer, pair it once:\n"
-              "      python -m wellbeing pair <ip:port shown under 'Pair device with pairing code'> <code>\n"
-              "  Then pass the address from the Wireless debugging screen:\n"
-              "      python -m wellbeing connect <ip:port>", file=sys.stderr)
-        return 1
-
-    for address in addresses:
-        try:
-            print(adb.connect(address))
-            return 0
-        except adb.AdbError as exc:
-            print(f"  {address}: {exc}", file=sys.stderr)
-    print("Couldn't connect. If the phone rebooted, the port changes — check the "
-          "Wireless debugging screen.", file=sys.stderr)
-    return 1
-
-
-def cmd_pair(args) -> int:
-    try:
-        print(adb.pair(args.address, args.code))
-    except adb.AdbError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print("paired. Now run: python -m wellbeing connect")
-    return 0
-
-
-def cmd_sync(args) -> int:
-    conn = db.connect(args.db)
-    try:
-        serial = adb.require_device(args.serial)
-        if not _check_phone_timezone(serial, strict=True):
-            return 2
-        result = sync_mod.sync(conn, serial, fetch_labels=args.fetch_labels,
-                               keep_raw=not args.no_raw)
-    except (adb.AdbError, db.OverlapError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(f"{result['device']}: {result['events_seen']} events in dump, "
-          f"{result['events_added']} new, {result['interval_rows']} bucket rows, "
-          f"{result['labels_added']} new labels")
-    print(f"covering {' .. '.join(result['days'])}")
-    return 0
-
-
-def cmd_ingest(args) -> int:
-    conn = db.connect(args.db)
-    text = Path(args.file).read_text()
-    result = sync_mod.ingest(conn, text, fetch_labels=args.fetch_labels)
-    print(result)
-    return 0
 
 
 def cmd_report(args) -> int:
@@ -130,36 +31,6 @@ def cmd_report(args) -> int:
     print(f"\n{'top apps':30}{'time':>10}{'opens':>8}")
     for r in stats.top_apps(conn, start, end, limit=args.top):
         print(f"{r['label'][:29]:30}{_fmt(r['ms']):>10}{r['opens']:>8}")
-    return 0
-
-
-def cmd_deep_sync(args) -> int:
-    """Pull the persisted history the companion APK can reach."""
-    conn = db.connect(args.db)
-    sync_mod.backup_db(conn)
-    try:
-        serial = adb.require_device(args.serial)
-        _check_phone_timezone(serial, strict=False)
-        fresh = appdump.ensure_installed(serial)
-        if fresh:
-            print(f"installed {appdump.PKG} and granted usage access")
-        captured = appdump.capture(serial, days=args.days)
-    except adb.AdbError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    try:
-        result = appdump.ingest_files(conn, captured, fetch_labels=args.fetch_labels)
-    except db.OverlapError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    if result["clock_shift_ms"]:
-        print(f"the phone's clock moved {result['clock_shift_ms']:+,} ms since the last capture; "
-              f"timestamps realigned to the stored ones")
-    print(f"{result['events_seen']:,} events in dump, {result['events_added']:,} new, "
-          f"{result['buckets']:,} bucket rows, {result['event_stats']} device counters, "
-          f"{result['configs']} configurations")
-    days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM usage_slice ORDER BY day")]
-    print(f"day-by-day history now covers {days[0]} .. {days[-1]} ({len(days)} days)")
     return 0
 
 
@@ -352,40 +223,10 @@ def main(argv=None) -> int:
     p.add_argument("--db", default=str(db.DEFAULT_DB), help="SQLite file (default: data/usage.db)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sp = sub.add_parser("devices", help="list attached devices")
-    sp.set_defaults(func=cmd_devices)
-
-    sp = sub.add_parser("connect", help="attach the phone over Wi-Fi")
-    sp.add_argument("address", nargs="?", help="ip:port from the Wireless debugging screen")
-    sp.set_defaults(func=cmd_connect)
-
-    sp = sub.add_parser("pair", help="pair this computer with the phone, once")
-    sp.add_argument("address", help="ip:port shown under 'Pair device with pairing code'")
-    sp.add_argument("code", help="the 6-digit pairing code")
-    sp.set_defaults(func=cmd_pair)
-
-    sp = sub.add_parser("sync", help="pull usage stats from the phone into the database")
-    sp.add_argument("--serial", help="device serial, when more than one is attached")
-    sp.add_argument("--fetch-labels", action="store_true",
-                    help="look up unknown app names on the Play Store (sends package names to Google)")
-    sp.add_argument("--no-raw", action="store_true", help="do not keep a copy of the raw dump")
-    sp.set_defaults(func=cmd_sync)
-
-    sp = sub.add_parser("ingest", help="ingest a previously saved dump file")
-    sp.add_argument("file")
-    sp.add_argument("--fetch-labels", action="store_true")
-    sp.set_defaults(func=cmd_ingest)
-
     sp = sub.add_parser("report", help="print a summary to the terminal")
     sp.add_argument("--days", type=int, default=14)
     sp.add_argument("--top", type=int, default=12)
     sp.set_defaults(func=cmd_report)
-
-    sp = sub.add_parser("deep-sync", help="pull deeper history using the companion APK")
-    sp.add_argument("--serial")
-    sp.add_argument("--days", type=int, default=400, help="how far back to ask for")
-    sp.add_argument("--fetch-labels", action="store_true")
-    sp.set_defaults(func=cmd_deep_sync)
 
     sp = sub.add_parser("ingest-phone",
                         help="read what the phone uploaded to Drive (My Drive/PhoneUsage/phone) and update the archive")
@@ -437,8 +278,8 @@ def main(argv=None) -> int:
 
     args = p.parse_args(argv)
     # Everything that turns instants into days or hours must agree on a zone,
-    # so pin it before the command runs. These three never do date arithmetic.
-    if args.cmd not in ("devices", "where", "set-timezone", "connect", "pair"):
+    # so pin it before the command runs. These two never do date arithmetic.
+    if args.cmd not in ("where", "set-timezone"):
         try:
             archive_mod.pin_timezone()
         except archive_mod.TimezoneError as exc:

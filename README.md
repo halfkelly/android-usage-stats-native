@@ -186,19 +186,10 @@ assumptions worth knowing.
 | `set-timezone ZONE` | record the archive's timezone, once |
 | `rebuild` | recompute derived tables from stored events |
 | `garmin-login`, `garmin` | Garmin Connect daily health data |
-| `sync`, `deep-sync`, `devices`, `connect`, `pair`, `ingest FILE` | legacy adb capture, see below |
 
 Every command that writes copies `data/usage.db` to `data/usage.db.bak` first.
 `--fetch-labels` looks unknown package names up on the Play Store; it is off by
 default because it sends your package names to Google.
-
-### Legacy: capturing over adb
-
-Before the phone app uploaded by itself, the computer pulled the data over adb
-(`sync.sh`: `deep-sync`, falling back to `sync`). It still works, through
-`usbipd` (USB) or wireless debugging. It isn't needed, and the scheduled
-autosync no longer uses it. `deep-sync` uses the same app's `--ei days N` mode;
-`sync` parses `dumpsys usagestats`, which only holds 24h.
 
 ## Layout
 
@@ -207,8 +198,8 @@ wellbeing/
   inbox.py     the phone's uploads (PhoneUsage/phone) -> database
   archive.py   where the archive lives; its timezone
   export.py    database -> archive CSVs;  importer.py: the reverse
-  sync.py      rebuild derived tables; legacy adb capture
-  parse.py     session reconstruction; legacy dumpsys parser
+  sync.py      rebuild derived tables (sessions, hourly slices)
+  parse.py     events -> sessions
   appdump.py   the app's CSV formats; clock-shift detection
   db.py        SQLite schema    stats.py: read-side queries
   server.py    Flask app        templates/dashboard.html

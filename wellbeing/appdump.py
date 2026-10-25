@@ -1,34 +1,20 @@
-"""Deep history via the companion APK.
+"""The phone app's CSV formats, and undoing a shift in the phone's clock.
 
-`dumpsys usagestats` only prints what the service holds in memory: 24h of
-events and the current rolling buckets. `UsageStatsManager.queryEvents` and
-`queryUsageStats` read the *persisted* store behind it, which on the test
-device reaches back about ten days of events and months of aggregates.
-
-Reaching those APIs needs an app holding PACKAGE_USAGE_STATS, so `android/`
-contains a ~150 line APK that queries them and writes CSV. This module builds,
-installs, runs and ingests it.
+The app (android/) writes what UsageStatsManager.queryEvents and
+queryUsageStats return -- the persisted store, about ten days of events and
+months of buckets -- as CSV; inbox.py ingests it. These parsers turn the CSV
+into the same Event and PackageStat rows everything else uses.
 """
 from __future__ import annotations
 
 import csv
 from collections import Counter
-import subprocess
-import time
 from pathlib import Path
 
-from . import adb, db, labels
 from .parse import Event, PackageStat
 
-ROOT = Path(__file__).resolve().parent.parent
-APK = ROOT / "android" / "build" / "usagedump.apk"
-BUILD = ROOT / "android" / "build.sh"
-PKG = "com.shrey.usagedump"
-REMOTE_DIR = f"/sdcard/Android/data/{PKG}/files"
-
 # android.app.usage.UsageEvents.Event constants. The CSV carries the ints, and
-# the names must match what parse.py produces for a dumpsys dump so both
-# sources land in one events table.
+# the names are what the events table and every query use.
 EVENT_TYPES = {
     1: "ACTIVITY_RESUMED", 2: "ACTIVITY_PAUSED", 3: "END_OF_DAY",
     4: "CONTINUE_PREVIOUS_DAY", 5: "CONFIGURATION_CHANGE", 6: "SYSTEM_INTERACTION",
@@ -42,55 +28,6 @@ EVENT_TYPES = {
     26: "DEVICE_SHUTDOWN", 27: "DEVICE_STARTUP", 28: "USER_UNLOCKED",
     29: "USER_STOPPED", 30: "LOCUS_ID_SET", 31: "APP_COMPONENT_USED",
 }
-
-
-def build_apk() -> Path:
-    if not APK.exists():
-        subprocess.run(["bash", str(BUILD)], check=True, capture_output=True, text=True)
-    return APK
-
-
-def ensure_installed(serial: str) -> bool:
-    """Install the APK and grant usage access. Returns True if it installed now."""
-    installed = PKG in adb.shell(f"pm list packages {PKG}", serial)
-    if not installed:
-        build_apk()
-        subprocess.run([adb.adb_path(), "-s", serial, "install", "-r", str(APK)],
-                       check=True, capture_output=True, text=True)
-    # appops is idempotent, and the grant does not survive a reinstall.
-    adb.shell(f"appops set {PKG} GET_USAGE_STATS allow", serial)
-    return not installed
-
-
-FILES = ("buckets.csv", "events.csv", "eventstats.csv", "configs.csv")
-
-
-def capture(serial: str, days: int = 400, out_dir: Path | None = None) -> Path:
-    """Run the dump activity and pull its two CSVs."""
-    ensure_installed(serial)
-    adb.shell(f"rm -f {REMOTE_DIR}/*.csv", serial)
-    adb.shell(f"am start -n {PKG}/.DumpActivity --ei days {days}", serial)
-
-    out_dir = Path(out_dir or ROOT / "raw" / "app")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for _ in range(30):  # the activity writes and finishes; poll rather than guess
-        time.sleep(1)
-        listing = adb.shell(f"ls {REMOTE_DIR}", serial)
-        if all(name in listing for name in FILES):
-            break
-    else:
-        raise adb.AdbError(
-            f"{PKG} produced no output. Check that usage access is granted: "
-            f"Settings > Apps > Special access > Usage data access."
-        )
-
-    paths = []
-    for name in FILES:
-        local = out_dir / name
-        subprocess.run([adb.adb_path(), "-s", serial, "pull", f"{REMOTE_DIR}/{name}", str(local)],
-                       check=True, capture_output=True, text=True)
-        paths.append(local)
-    return out_dir
 
 
 def parse_events(path: Path) -> list[Event]:
@@ -242,35 +179,3 @@ def apply_shift(shift: int, events, buckets, estats, configs) -> None:
         for r in rows:
             for f in fields:
                 r[f] = _shifted(r[f], shift)
-
-
-def ingest_files(conn, out_dir: Path, *, fetch_labels: bool = False) -> dict:
-    from .sync import rebuild
-
-    out_dir = Path(out_dir)
-    events = parse_events(out_dir / "events.csv")
-    buckets = parse_buckets(out_dir / "buckets.csv")
-    estats = parse_event_stats(out_dir / "eventstats.csv") if (out_dir / "eventstats.csv").exists() else []
-    configs = parse_config_stats(out_dir / "configs.csv") if (out_dir / "configs.csv").exists() else []
-
-    shift = detect_clock_shift(conn, events)
-    if shift:
-        apply_shift(shift, events, buckets, estats, configs)
-    added = db.insert_phone_events(conn, events)
-    db.insert_interval_stats(conn, buckets)
-    db.insert_event_stats(conn, estats)
-    db.insert_config_stats(conn, configs)
-
-    if events:
-        rebuild(conn, min(e.ts_ms for e in events), max(e.ts_ms for e in events))
-
-    packages = {e.package for e in events if e.package} | {b.package for b in buckets}
-    known = {r["package"]: r["label"] for r in conn.execute("SELECT package, label FROM apps")}
-    db.upsert_labels(conn, labels.resolve(sorted(packages), known=known, fetch=fetch_labels))
-
-    db.record_sync(conn, device="companion-apk", android="", events_seen=len(events),
-                   events_added=added,
-                   first_ts_ms=min((e.ts_ms for e in events), default=None),
-                   last_ts_ms=max((e.ts_ms for e in events), default=None))
-    return {"events_seen": len(events), "events_added": added, "buckets": len(buckets),
-            "event_stats": len(estats), "configs": len(configs), "clock_shift_ms": shift}

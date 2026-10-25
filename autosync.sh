@@ -55,7 +55,7 @@ trap 'rm -f "$LOCK"' EXIT
 IMPORTED=$("$PY" -m wellbeing import 2>&1 | grep -oE "[0-9,]+ events \([0-9,]+ new\)" | head -1)
 [ -n "$IMPORTED" ] && echo "$(stamp) archive -> local db: $IMPORTED"
 
-# The phone collects and uploads to My Drive/PhoneUsageInbox on its own; this
+# The phone collects and uploads to My Drive/PhoneUsage/phone on its own; this
 # only reads what arrived. Nothing new is a quiet no-op.
 echo "$(stamp) reading the phone's inbox on $ME"
 "$PY" -m wellbeing ingest-phone 2>&1 | sed "s/^/$(stamp)   /"

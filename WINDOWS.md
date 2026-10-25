@@ -12,8 +12,8 @@ computers — this Windows/WSL machine and a Mac — share **one archive in Driv
 and each keep their own derived SQLite database.
 
 - Repo: `github.com/Shrey97/adb-usage-stats` (private)
-- Archive: `My Drive/PhoneUsageBackup/` — shared, append-only, the source of truth
-- Code bundle: `My Drive/PhoneUsageCode/adb_usage_stats.zip` — how this machine
+- Archive: `My Drive/PhoneUsage/archive/` — shared, append-only, the source of truth
+- Code bundle: `My Drive/PhoneUsage/code/adb_usage_stats.zip` — how this machine
   got its copy, and what task 1 replaces
 - Read `DATA.md` for the archive format and `README.md` for setup
 
@@ -36,10 +36,20 @@ rm -rf dl && cd ..
 bash android/build.sh
 ```
 
-- `android/debug.keystore` is generated on the first build and is **not in
-  git**. Keep it: an APK signed with a different key can't update the
-  installed app, which means an uninstall and a fresh grant of usage access
-  and Drive.
+- **The signing key.** `android/debug.keystore` signs the app and is not in
+  git. A backup lives in `My Drive/PhoneUsage/code/signing/` with
+  `oauth.properties` and a README. On a new machine, copy both into
+  `android/` **before** the first build: `build.sh` otherwise makes a new key,
+  and an APK signed with a different key can't update the installed app (that
+  means an uninstall, then usage access, battery and Drive all over again).
+- **Release vs. debuggable.** `bash android/build.sh` makes the everyday,
+  non-debuggable build. `DEBUGGABLE=1 bash android/build.sh` makes one whose
+  private files `adb shell run-as` can read, which is useful for testing. That
+  includes the Drive sign-in token, so put the release build back afterwards.
+  Both use the same key, so `install -r` switches between them and keeps every
+  setting.
+- **The APK in git is built without `oauth.properties`**, so it never carries
+  the client secret. Build the Drive-enabled one locally to install.
 - **Installing over a cable without sudo:** use a *Windows* adb, not WSL's.
   Windows already has a driver for the phone, so there's no usbipd and no
   root adb server. Unzip
@@ -62,9 +72,9 @@ bash android/build.sh
    empty without the fstab line). So:
 
        sudo sed -i 's|^#G: /mnt/g drvfs|G: /mnt/g drvfs|' /etc/fstab
-       sed -i 's|^export PHONE_USAGE_ARCHIVE=.*|export PHONE_USAGE_ARCHIVE="/mnt/g/My Drive/PhoneUsageBackup"|' ~/.bashrc
+       sed -i 's|^export PHONE_USAGE_ARCHIVE=.*|export PHONE_USAGE_ARCHIVE="/mnt/g/My Drive/PhoneUsage/archive"|' ~/.bashrc
        sudo mount -t drvfs G: /mnt/g 2>/dev/null
-       ls "/mnt/g/My Drive/PhoneUsageBackup/archive.json"
+       ls "/mnt/g/My Drive/PhoneUsage/archive/archive.json"
 
    **The `mount -a failed` popup at WSL start is accepted as cosmetic.** Do not
    spend more time on it. It appears only when WSL starts before Drive has
@@ -88,7 +98,7 @@ bash android/build.sh
 **A. Unit tests.** `.venv/bin/python -m pytest tests/ -q` -> expect `23 passed`.
 
 **B. Configuration.** `.venv/bin/python -m wellbeing where` must report the
-`/mnt/g/My Drive/PhoneUsageBackup` archive, `timezone: Asia/Kolkata`, and code
+`/mnt/g/My Drive/PhoneUsage/archive` archive, `timezone: Asia/Kolkata`, and code
 matching the bundle. `echo $PHONE_USAGE_TZ` must be empty.
 
 **C. The two machines must agree, exactly.** This is the test that matters most,
@@ -212,7 +222,7 @@ interchangeable: sync from either, view the dashboard on either.
 | | Mac today | This machine |
 |---|---|---|
 | Code | git clone of `main`, matches the Drive bundle | task 1 |
-| Archive | `PhoneUsageBackup/` in Google Drive | works via `G:`; mark it Available offline |
+| Archive | `PhoneUsage/archive/` in Google Drive | works via `G:`; mark it Available offline |
 | Timezone | `Asia/Kolkata`, pinned from `archive.json` | verify — this machine's clock is UTC |
 | Excluded apps | 5 packages in `archive.json` | automatic, shared through Drive |
 | Phone over Wi-Fi | paired, `wellbeing connect` works | task 3 — pairing is **per computer** |
@@ -230,7 +240,7 @@ copy came from the zip and is behind. An old `export.py` writing to the shared
 Drive archive is how it was damaged once before — see the timezone note below.
 
 **2. The archive's timezone is `Asia/Kolkata` and is not negotiable.** It lives
-in `PhoneUsageBackup/archive.json`. Every `day`, `hour`, `first_use`/`last_use`
+in `PhoneUsage/archive/archive.json`. Every `day`, `hour`, `first_use`/`last_use`
 and window label in the archive is cut in that zone, so that both machines agree.
 This machine's own clock is `Etc/UTC`, which is exactly the trap: a sync run here
 once relabelled five calendar files and three window-label files in the shared
@@ -284,11 +294,11 @@ around — which is when they are logged in. The logged-out case Mirror was
 protecting against is one where the sync would fail at the phone anyway.
 
 So:
-- **Leave `PHONE_USAGE_ARCHIVE` pointing at `/mnt/g/My Drive/PhoneUsageBackup`.**
+- **Leave `PHONE_USAGE_ARCHIVE` pointing at `/mnt/g/My Drive/PhoneUsage/archive`.**
   It already resolves and `wellbeing where` already reports `Asia/Kolkata`.
 - **Keep the fstab line, but add `nofail`** so a WSL start before `G:` exists
   stops erroring instead of failing the boot.
-- In Drive for Desktop on Windows, right-click **`PhoneUsageBackup` → Available
+- In Drive for Desktop on Windows, right-click **`PhoneUsage/archive` → Available
   offline**. This caches just that folder locally while everything else stays
   streamed, so reads from WSL do not stall on downloads. The Mac does the same.
 - In task 6, set the Task Scheduler job to **"Run only when the user is logged

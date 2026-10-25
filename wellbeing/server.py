@@ -72,6 +72,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             "app_choices": stats.top_apps(c, start, end, limit=500,
                                           include_chrome=include_chrome),
             "coverage": cov,
+            "phone_warning": inbox_mod.staleness(inbox_mod.inbox_dir()),
             "totals": {
                 "ms": sum(d["ms"] for d in daily),
                 "unlocks": sum(d["unlocks"] for d in daily),
@@ -106,7 +107,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
         """Read what the phone uploaded to Drive and write the shared archive.
 
         The phone collects and uploads on its own (android/DRIVE_SETUP.md), so
-        nothing here talks to it: this ingests PhoneUsageInbox, then exports,
+        nothing here talks to it: this ingests My Drive/PhoneUsage/phone, then exports,
         exactly like `wellbeing ingest-phone`. The old adb pull is still there
         as `wellbeing deep-sync`.
         """
@@ -120,7 +121,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             box = inbox_mod.inbox_dir()
             if box is None or not box.is_dir():
                 raise FileNotFoundError(
-                    f"no phone inbox at {box or 'My Drive/' + inbox_mod.FOLDER_NAME} -- "
+                    f"no phone inbox at {box or 'My Drive/PhoneUsage/phone'} -- "
                     "has the phone app connected to Drive yet?")
             result = inbox_mod.ingest_inbox(c, box)
             cov = stats.coverage(c)

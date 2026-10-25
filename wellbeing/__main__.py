@@ -164,11 +164,11 @@ def cmd_deep_sync(args) -> int:
 
 
 def cmd_ingest_phone(args) -> int:
-    """Read the phone's own uploads (PhoneUsageInbox) and update the archive."""
+    """Read the phone's own uploads (My Drive/PhoneUsage/phone) and update the archive."""
     inbox = Path(args.source).expanduser() if args.source else inbox_mod.inbox_dir()
     if inbox is None:
-        print("error: Google Drive not found, so no PhoneUsageInbox. Point at it with "
-              f"${inbox_mod.ENV_VAR}=/path/to/PhoneUsageInbox", file=sys.stderr)
+        print("error: Google Drive not found, so no phone inbox. Point at it with "
+              f"${inbox_mod.ENV_VAR}=/path/to/PhoneUsage/phone", file=sys.stderr)
         return 1
     if not inbox.is_dir():
         print(f"error: No phone inbox at {inbox}", file=sys.stderr)
@@ -195,6 +195,9 @@ def cmd_ingest_phone(args) -> int:
     when = datetime.fromtimestamp(collected / 1000).strftime("%Y-%m-%d %H:%M") if collected else "?"
     snaps = result["snapshots"]
     print(f"{inbox}  (phone last collected {when})")
+    stale = inbox_mod.staleness(inbox)
+    if stale:
+        print(f"WARNING: {stale}", file=sys.stderr)
     print(f"  {len(result['files'])} day file(s), {result['events_seen']:,} events, "
           f"{result['events_added']:,} new; {snaps['buckets']:,} bucket rows, "
           f"{snaps['eventstats']} counters, {snaps['configs']} configs")
@@ -270,6 +273,9 @@ def cmd_where(args) -> int:
         when = (datetime.fromtimestamp(collected / 1000, zone).strftime("%Y-%m-%d %H:%M")
                 if collected else "unknown")
         print(f"inbox:    {inbox} — phone last collected {when}")
+        stale = inbox_mod.staleness(inbox)
+        if stale:
+            print(f"          WARNING: {stale}")
     print(f"database: {args.db}")
     return 0
 
@@ -390,8 +396,8 @@ def main(argv=None) -> int:
     sp.set_defaults(func=cmd_deep_sync)
 
     sp = sub.add_parser("ingest-phone",
-                        help="read what the phone uploaded to Drive (PhoneUsageInbox) and update the archive")
-    sp.add_argument("source", nargs="?", help=f"inbox directory (default: My Drive/{inbox_mod.FOLDER_NAME})")
+                        help="read what the phone uploaded to Drive (My Drive/PhoneUsage/phone) and update the archive")
+    sp.add_argument("source", nargs="?", help=f"inbox directory (default: My Drive/{archive_mod.PROJECT_FOLDER}/{inbox_mod.FOLDER_NAME})")
     sp.add_argument("--all", action="store_true", help="re-read every file, not just changed ones")
     sp.add_argument("--no-export", action="store_true", help="database only, skip the archive")
     sp.add_argument("--fetch-labels", action="store_true",

@@ -1,16 +1,16 @@
-"""The phone's own uploads: My Drive/PhoneUsageInbox/.
+"""The phone's own uploads: My Drive/PhoneUsage/phone/.
 
 The companion app collects every 6 hours and uploads, with no computer
 involved (android/DRIVE_SETUP.md). Drive for desktop brings the folder here:
 
-    PhoneUsageInbox/
+    PhoneUsage/phone/
       events/events-YYYY-MM-DD.csv       one local day; rewritten until the day is over
       snapshots/buckets-YYYY-MM-DD.csv   the phone's buckets as of that day's last run
       snapshots/eventstats-...csv, configs-...csv
       device.json                        timezone, device, last collection
 
 `ingest_inbox` reads what changed since the last run into usage.db. The inbox is
-the phone's, read-only from here: the shared archive (PhoneUsageBackup/) is
+the phone's, read-only from here: the shared archive (PhoneUsage/archive/) is
 still what `export` writes and every machine imports.
 """
 from __future__ import annotations
@@ -23,21 +23,26 @@ from pathlib import Path
 
 from . import appdump, archive, db, labels
 
-FOLDER_NAME = "PhoneUsageInbox"
+FOLDER_NAME = "phone"                 # inside archive.PROJECT_FOLDER
+LEGACY_FOLDER_NAME = "PhoneUsageInbox"  # the app's first layout, at the top of My Drive
 ENV_VAR = "PHONE_USAGE_INBOX"
 SNAPSHOT_KINDS = ("buckets", "eventstats", "configs")
 _DAY_FILE = re.compile(r"^(?P<kind>[a-z]+)-(?P<day>\d{4}-\d{2}-\d{2})(?: \(\d+\))?\.csv$")
 
 
 def inbox_dir() -> Path | None:
-    """`PHONE_USAGE_INBOX`, else next to an overridden archive, else in My Drive."""
+    """`PHONE_USAGE_INBOX`, else beside an overridden archive, else in My Drive/PhoneUsage."""
     override = os.environ.get(ENV_VAR)
     if override:
         return Path(override).expanduser()
     if os.environ.get(archive.ENV_VAR):
-        return Path(os.environ[archive.ENV_VAR]).expanduser().parent / FOLDER_NAME
+        overridden = Path(os.environ[archive.ENV_VAR]).expanduser()
+        if overridden.name == archive.LEGACY_FOLDER_NAME:
+            # The old top-level archive: its parent is My Drive itself.
+            return archive.project_path(overridden.parent, FOLDER_NAME, LEGACY_FOLDER_NAME)
+        return overridden.parent / FOLDER_NAME
     root = archive.drive_root()
-    return root / FOLDER_NAME if root else None
+    return archive.project_path(root, FOLDER_NAME, LEGACY_FOLDER_NAME) if root else None
 
 
 def read_device(inbox: Path) -> dict:
@@ -45,6 +50,26 @@ def read_device(inbox: Path) -> dict:
         return json.loads((inbox / "device.json").read_text())
     except (OSError, ValueError):
         return {}
+
+
+# The phone collects every 6 h; a day with nothing new means it has stopped
+# (sign-in expired, access removed, One UI killing it) -- and its raw events
+# only last ~10 days, so this is worth saying out loud.
+STALE_MS = 24 * 3_600_000
+
+
+def staleness(inbox: Path | None) -> str | None:
+    """A warning when the phone hasn't uploaded for a day, else None."""
+    if inbox is None or not inbox.is_dir():
+        return "nothing from the phone yet -- is the app connected to Google Drive?"
+    collected = read_device(inbox).get("collected_at_ms")
+    if not collected:
+        return None
+    age = int(time.time() * 1000) - collected
+    if age <= STALE_MS:
+        return None
+    return (f"the phone hasn't uploaded for {age // 3_600_000} hours -- open Usage Dump "
+            f"on the phone to see why (it keeps raw events only ~10 days)")
 
 
 def _day_files(folder: Path) -> list[tuple[str, str, Path]]:

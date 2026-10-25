@@ -181,3 +181,30 @@ def test_the_command_backs_up_the_database_before_writing(tmp_path, monkeypatch)
     assert backup.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0  # taken before
     assert _count(db.connect(dbfile)) == 180
     assert cli.main(["--db", str(dbfile), "ingest-phone", str(tmp_path / "nope")]) == 1
+
+
+def test_staleness_warns_after_a_day_without_uploads(tmp_path):
+    root = _inbox(tmp_path)  # device.json says collected at D0 + 2 days: long ago now
+    assert "hasn't uploaded" in inbox.staleness(root)
+    (root / "device.json").write_text(json.dumps({"collected_at_ms": int(time.time() * 1000)}))
+    assert inbox.staleness(root) is None
+    assert "nothing from the phone" in inbox.staleness(tmp_path / "missing")
+
+
+def test_the_project_folder_is_preferred_and_the_old_names_still_found(tmp_path, monkeypatch):
+    from wellbeing import archive
+    drive = tmp_path / "My Drive"
+    (drive / "PhoneUsageBackup").mkdir(parents=True)
+    (drive / "PhoneUsageInbox").mkdir()
+    monkeypatch.delenv("PHONE_USAGE_INBOX", raising=False)
+    monkeypatch.delenv("PHONE_USAGE_ARCHIVE", raising=False)
+    monkeypatch.setattr(archive, "drive_root", lambda *a, **k: drive)
+    assert archive.archive_dir() == drive / "PhoneUsageBackup"   # before the move
+    assert inbox.inbox_dir() == drive / "PhoneUsageInbox"
+    for name in ("archive", "phone"):
+        (drive / "PhoneUsage" / name).mkdir(parents=True)
+    assert archive.archive_dir() == drive / "PhoneUsage" / "archive"   # after
+    assert inbox.inbox_dir() == drive / "PhoneUsage" / "phone"
+    # An archive override at the old top-level name must not put the inbox at My Drive/phone.
+    monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(drive / "PhoneUsageBackup"))
+    assert inbox.inbox_dir() == drive / "PhoneUsage" / "phone"

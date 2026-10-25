@@ -19,7 +19,16 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCAL_FALLBACK = ROOT / "data" / "csv"
-FOLDER_NAME = "PhoneUsageBackup"
+# Everything this project keeps in Drive lives under one folder:
+#   My Drive/PhoneUsage/phone/    the phone app's uploads (inbox.py)
+#   My Drive/PhoneUsage/archive/  this archive
+#   My Drive/PhoneUsage/code/     the code bundle (codecheck.py)
+# The phone app creates PhoneUsage itself: its drive.file permission can only
+# write into folders it made. The old top-level names are still found, so a
+# machine keeps working until the folders are moved.
+PROJECT_FOLDER = "PhoneUsage"
+FOLDER_NAME = "archive"
+LEGACY_FOLDER_NAME = "PhoneUsageBackup"
 ENV_VAR = "PHONE_USAGE_ARCHIVE"
 
 
@@ -74,6 +83,13 @@ def _seed_from_local(dest: Path) -> int:
     return copied
 
 
+def project_path(root: Path, name: str, legacy: str) -> Path:
+    """My Drive/PhoneUsage/<name>, or the old top-level <legacy> while only that exists."""
+    current = root / PROJECT_FOLDER / name
+    old = root / legacy
+    return old if old.is_dir() and not current.is_dir() else current
+
+
 def archive_dir(create: bool = False) -> Path:
     """The archive directory, preferring Drive and falling back to local.
 
@@ -85,7 +101,7 @@ def archive_dir(create: bool = False) -> Path:
         path = Path(override).expanduser()
     else:
         root = drive_root()
-        path = (root / FOLDER_NAME) if root else LOCAL_FALLBACK
+        path = project_path(root, FOLDER_NAME, LEGACY_FOLDER_NAME) if root else LOCAL_FALLBACK
     if create:
         path.mkdir(parents=True, exist_ok=True)
         seeded = _seed_from_local(path)

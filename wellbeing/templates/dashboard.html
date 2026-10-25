@@ -138,6 +138,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
     <button class="btn" id="sync">Get phone data</button>
   </div>
 
+  <p class="err" id="phone-warning" role="alert" hidden style="margin:-8px 0 16px"></p>
   <div class="tiles" id="tiles"></div>
 
   <div class="card">
@@ -591,6 +592,10 @@ function render() {
   document.getElementById("cov").textContent = cov.days.length
     ? `${d.start} → ${d.end} · ${cov.event_count.toLocaleString()} events from ${cov.sync_count} sync${cov.sync_count === 1 ? "" : "s"}`
     : "no data yet";
+  // The phone works unattended, so this is the one place a stopped phone shows up.
+  const warn = document.getElementById("phone-warning");
+  warn.hidden = !d.phone_warning;
+  warn.textContent = d.phone_warning ? `⚠ ${d.phone_warning[0].toUpperCase()}${d.phone_warning.slice(1)}` : "";
   document.getElementById("apps-note").textContent =
     `Foreground time ${d.start} → ${d.end}. Click any app for its day-by-day detail.`;
   safe("dates", () => {

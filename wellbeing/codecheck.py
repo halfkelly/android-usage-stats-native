@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from . import archive
 
 ROOT = Path(__file__).resolve().parent.parent
-BUNDLE = "PhoneUsageCode/adb_usage_stats.zip"
+BUNDLE = "adb_usage_stats.zip"   # in My Drive/PhoneUsage/code (formerly PhoneUsageCode)
 TOP = "adb_usage_stats/"
 # The files that make up the application; data and binaries are excluded. Both
 # sides are filtered by the same rule, so a nested file can never match on one
@@ -42,7 +42,7 @@ def _bundle_files() -> dict[str, bytes] | None:
     if root is None:
         return None
     try:
-        with zipfile.ZipFile(root / BUNDLE) as z:
+        with zipfile.ZipFile(archive.project_path(root, "code", "PhoneUsageCode") / BUNDLE) as z:
             return {n[len(TOP):]: z.read(n) for n in z.namelist()
                     if n.startswith(TOP) and not n.endswith("/") and _wanted(n[len(TOP):])}
     except (FileNotFoundError, OSError, zipfile.BadZipFile):

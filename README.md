@@ -8,10 +8,10 @@ never has to connect to it.
 
 ```
 phone   Usage Dump app, every 6 h, no network needed
-          collects raw CSVs -> uploads changed files to My Drive/PhoneUsageInbox/
+          collects raw CSVs -> uploads changed files to My Drive/PhoneUsage/phone/
                                 (its own drive.file permission: it sees only its own files)
-PC      Drive for desktop syncs PhoneUsageInbox
-          wellbeing ingest-phone -> data/usage.db -> PhoneUsageBackup/ archive -> dashboard
+PC      Drive for desktop syncs PhoneUsage/phone
+          wellbeing ingest-phone -> data/usage.db -> PhoneUsage/archive/ archive -> dashboard
 ```
 
 The phone forgets raw events after about 10 days. The adb workflow below lost
@@ -33,10 +33,16 @@ whether or not a computer is around.
    **Run now** once. The status screen should show about 10 days of files
    and an upload.
 
+**Everything in Drive is under one folder, `My Drive/PhoneUsage/`:**
+`phone/` holds the app's uploads, `archive/` the permanent CSV history, and
+`code/` the code bundle plus `signing/` (the app's signing key and OAuth
+client, see WINDOWS.md). The app creates the folder itself: its `drive.file`
+permission can only write into folders it made.
+
 **Day to day, PC side:** `./dashboard.sh` (it runs `import`, then
 `ingest-phone`, then serves), or the dashboard's **Get phone data** button.
 `wellbeing where` shows when the phone last collected. In Drive for desktop,
-mark `PhoneUsageInbox` **Available offline**, as for `PhoneUsageBackup`.
+mark the `PhoneUsage` folder **Available offline**; that covers all three subfolders.
 
 Everything below about USB, wireless debugging and `sync` / `deep-sync` is the
 **legacy path**. It still works but isn't needed.
@@ -123,7 +129,7 @@ write-ahead log is a real corruption risk, while append-only CSV is safe.
   phone ──USB──> whichever machine is handy
                       │  deep-sync + export
                       v
-             My Drive/PhoneUsageBackup/        <- the shared archive
+             My Drive/PhoneUsage/archive/        <- the shared archive
                       │  import
                       v
            any machine ──> local usage.db ──> dashboard
@@ -155,7 +161,7 @@ days the phone has already forgotten.
 #### Setting up the Windows machine (WSL Ubuntu)
 
 **1. Google Drive for desktop on Windows**, signed in to the same account. In
-its settings, right-click `PhoneUsageBackup` → **Available offline**, so reads
+its settings, right-click `PhoneUsage/archive` → **Available offline**, so reads
 from WSL don't stall waiting on downloads.
 
 **2. Get the code**, by cloning `github.com/Shrey97/adb-usage-stats` (private).
@@ -170,7 +176,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 chmod +x sync.sh dashboard.sh autosync.sh
 ```
 
-The zip at `My Drive/PhoneUsageCode/adb_usage_stats.zip` still exists and is
+The zip at `My Drive/PhoneUsage/code/adb_usage_stats.zip` still exists and is
 still refreshed on every export, but it is the fallback for a machine with no
 GitHub access, not the intended route. `wellbeing where` compares the local code
 against it either way.
@@ -193,7 +199,7 @@ sudo mkdir -p /mnt/g && sudo mount -t drvfs G: /mnt/g
 or point at the folder directly, permanently:
 
 ```bash
-echo 'export PHONE_USAGE_ARCHIVE="/mnt/g/My Drive/PhoneUsageBackup"' >> ~/.bashrc
+echo 'export PHONE_USAGE_ARCHIVE="/mnt/g/My Drive/PhoneUsage/archive"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -374,7 +380,7 @@ ceiling without rooting the device.
 .venv/bin/python -m wellbeing export --days 30  # limit to the last 30 days
 ```
 
-Writes to the shared archive — `My Drive/PhoneUsageBackup/`, or `data/csv/` on a
+Writes to the shared archive — `My Drive/PhoneUsage/archive/`, or `data/csv/` on a
 machine without Google Drive. **See [DATA.md](DATA.md)** for what each file is for,
 what every column means, and the traps worth knowing about.
 
@@ -405,7 +411,7 @@ That makes the archive a second, independent copy of your history alongside
 each machine's `data/usage.db`.
 
 **Off-machine by default.** When Google Drive for desktop is installed the
-archive lives directly in `My Drive/PhoneUsageBackup/`, and Drive uploads it — there
+archive lives directly in `My Drive/PhoneUsage/archive/`, and Drive uploads it — there
 is no separate backup step. Without Drive it falls back to `data/csv/`.
 
 **Two traps in `app_buckets.csv`.** Its windows are the phone's, not calendar
@@ -444,7 +450,7 @@ wellbeing/
   parse.py     dumpsys parser + session reconstruction
   db.py        SQLite schema
   sync.py      capture → ingest → rebuild derived tables
-  inbox.py     the phone's own uploads (PhoneUsageInbox) → ingest
+  inbox.py     the phone's own uploads (PhoneUsage/phone) → ingest
   stats.py     read-side queries
   labels.py    package id → app name
   server.py    Flask app and JSON API

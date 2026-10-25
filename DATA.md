@@ -1,6 +1,6 @@
 # The data
 
-Reference for everything in the shared CSV archive: `My Drive/PhoneUsageBackup/`
+Reference for everything in the shared CSV archive: `My Drive/PhoneUsage/archive/`
 in Google Drive, or `data/csv/` on a machine without Drive. Run
 `.venv/bin/python -m wellbeing where` to see which one this machine uses. Counts
 and samples below were taken from the archive on 2026-09-14.
@@ -9,7 +9,7 @@ and samples below were taken from the archive on 2026-09-14.
 
 | Layer | What it is |
 |---|---|
-| **`My Drive/PhoneUsageBackup/`** | The permanent, shared archive. Append-only: a day that has ever been written stays, even if a database is later lost or rebuilt. Lives in Google Drive, so it is already off-machine and readable from every computer. Falls back to `data/csv/` where Drive isn't installed. Its `archive.json` records the timezone every day and hour is cut in. |
+| **`My Drive/PhoneUsage/archive/`** | The permanent, shared archive. Append-only: a day that has ever been written stays, even if a database is later lost or rebuilt. Lives in Google Drive, so it is already off-machine and readable from every computer. Falls back to `data/csv/` where Drive isn't installed. Its `archive.json` records the timezone every day and hour is cut in. |
 | **`data/usage.db`** | The working store the dashboard reads — one per machine. Derived: rebuilt from the archive's `events/` with `wellbeing import`. Deliberately *not* in Drive, because a half-synced SQLite file is a corruption risk. A copy is taken to `data/usage.db.bak` before every sync. |
 | **`raw/`** | Exactly what came off the phone. `raw/app/*.csv` is **overwritten every sync**; `raw/dump-*.txt` files accumulate. Not an archive — don't rely on it. |
 

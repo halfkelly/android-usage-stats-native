@@ -88,6 +88,7 @@ public class DumpActivity extends Activity {
             if (verificationUrl != null) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(verificationUrl)));
         });
         openGoogle.setVisibility(View.GONE);
+        button(col, "Open dashboard", v -> startActivity(new Intent(this, DashboardActivity.class)));
         runNow = button(col, "Run now", v -> runNow());
         access = button(col, "Grant usage access",
                 v -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));

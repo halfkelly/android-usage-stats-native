@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.shrey.usagedump"
-    android:versionCode="6" android:versionName="2.4">
+    android:versionCode="7" android:versionName="2.5">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -21,6 +21,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- The one "needs attention" notification (Notifier); asked for at first open. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- App names on the dashboard: Android 11+ hides other apps' labels
+         without this. Sideloaded, so Play's restrictions on it don't apply. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <!-- Not debuggable: a debuggable app's private files, the Drive refresh
          token among them, can be read by anyone with the unlocked phone and a
@@ -34,6 +37,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".DashboardActivity" android:exported="false"
+                  android:label="Dashboard"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
         <receiver android:name=".ScheduleReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

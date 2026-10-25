@@ -753,7 +753,8 @@ function render() {
   if (!d) return;
   const cov = d.coverage;
   document.getElementById("cov").textContent = cov.days.length
-    ? `${d.start} → ${d.end} · ${cov.event_count.toLocaleString()} events from ${cov.sync_count} sync${cov.sync_count === 1 ? "" : "s"}`
+    ? `${d.start} → ${d.end} · ${cov.event_count.toLocaleString()} events` +
+      (cov.sync_count == null ? "" : ` from ${cov.sync_count} sync${cov.sync_count === 1 ? "" : "s"}`)
     : "no data yet";
   safe("available", () => drawAvailable(cov.days));
   // The phone works unattended, so this is the one place a stopped phone shows up.

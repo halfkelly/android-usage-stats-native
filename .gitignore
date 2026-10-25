@@ -20,3 +20,6 @@ android/debug.keystore
 
 # The Drive OAuth client for the APK (android/DRIVE_SETUP.md)
 android/oauth.properties
+
+# check.html input, regenerated from a phone inbox
+android/web/data.js

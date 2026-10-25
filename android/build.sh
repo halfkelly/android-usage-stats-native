@@ -23,7 +23,7 @@ PLATFORM="$(first_dir "$SDK/platforms/android-34" $TOOLS/sdk/platforms/android-3
   || { echo "no platform 34: sdkmanager \"platforms;android-34\"" >&2; exit 1; }
 ANDROID_JAR="$PLATFORM/android.jar"
 OUT=build
-rm -rf $OUT/classes $OUT/gen $OUT/*.apk.tmp && mkdir -p $OUT/classes $OUT/gen/com/shrey/usagedump
+rm -rf $OUT/classes $OUT/gen $OUT/assets $OUT/*.apk.tmp && mkdir -p $OUT/classes $OUT/gen/com/shrey/usagedump
 
 # The signing key, generated once. The APK only ever runs on your own phone.
 # A new key cannot update an APK signed by another one -- the phone would need
@@ -59,7 +59,13 @@ EOF
 # that includes the Drive refresh token, so never for the phone in daily use.
 DEBUG_FLAG=""
 if [ "${DEBUGGABLE:-0}" = "1" ]; then DEBUG_FLAG="--debug-mode"; echo "note: DEBUGGABLE build"; fi
-"$BT/aapt2" link -I "$ANDROID_JAR" --manifest AndroidManifest.xml $DEBUG_FLAG -o $OUT/base.apk
+# The dashboard: the PC's page, with phone.js loaded first to answer its
+# requests from the app's own data (android/web/phone.js).
+mkdir -p $OUT/assets
+sed '0,/<script>/s//<script src="phone.js"><\/script>\n<script>/' ../wellbeing/templates/dashboard.html > $OUT/assets/dashboard.html
+cp web/phone.js $OUT/assets/
+grep -q 'src="phone.js"' $OUT/assets/dashboard.html || { echo "could not wire phone.js into dashboard.html" >&2; exit 1; }
+"$BT/aapt2" link -I "$ANDROID_JAR" --manifest AndroidManifest.xml -A $OUT/assets $DEBUG_FLAG -o $OUT/base.apk
 javac -source 8 -target 8 -nowarn -Xlint:-options -bootclasspath "$ANDROID_JAR:$BT/core-lambda-stubs.jar" -classpath "$ANDROID_JAR" \
   -d $OUT/classes $(find src $OUT/gen -name '*.java')
 "$BT/d8" --lib "$ANDROID_JAR" --min-api 26 --output $OUT $(find $OUT/classes -name '*.class')

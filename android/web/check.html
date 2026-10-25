@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>phone.js check</title>
+<!-- Runs phone.js on the PC against day files, so its figures can be compared
+     with the Python server's. data.js (not in git) is written by
+     `python3 android/web/make_check_data.py <dir with events/>`. -->
+<script src="data.js"></script>
+<script>
+  window.Bridge = {
+    dayFiles: () => JSON.stringify(Object.keys(window.__files)),
+    readEvents: n => window.__files[n],
+    labels: () => "{}",
+    excluded: () => "[]",
+    setExcluded: () => {},
+    lastCollectedMs: () => String(window.__collected || 0),
+    collectNow: () => JSON.stringify({ ok: true, message: "" }),
+  };
+</script>
+<script src="phone.js"></script>
+<pre id="out"></pre>
+<script>
+  const q = new URLSearchParams(location.search);
+  const range = `start=${q.get("start")}&end=${q.get("end")}`;
+  const api = window.__phoneApi;
+  api.derive(false);
+  const out = {
+    summary: api.answer("/api/summary?" + range)[1],
+    app: api.answer("/api/app/" + (q.get("app") || "com.whatsapp") + "?" + range)[1],
+  };
+  document.getElementById("out").textContent = JSON.stringify(out);
+</script>

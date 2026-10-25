@@ -20,5 +20,4 @@ done
 
 echo ""
 echo "  Dashboard at http://127.0.0.1:5000"
-command -v open >/dev/null && open http://127.0.0.1:5000
 command -v wslview >/dev/null && wslview http://127.0.0.1:5000

@@ -57,16 +57,18 @@ public class CollectorJob extends JobService {
         }
     }
 
-    /** What both the job and the "Run now" button do. Call off the main thread. */
-    static String collectNow(Context c) {
+    static final String BY_SCHEDULE = "schedule", BY_RUN_NOW = "run now", BY_DASHBOARD = "dashboard";
+
+    /** What the job, "Run now" and the dashboard all do. Call off the main thread. */
+    static String collectNow(Context c, String trigger) {
         String result;
         try {
-            result = new Collector(c).collect();
+            result = new Collector(c).collect(trigger);
         } catch (Exception e) {
             Log.e(Collector.TAG, "collect FAILED", e);
             result = "failed: " + e.getMessage();
         }
-        State.note(c, State.LAST_COLLECT_AT, State.LAST_COLLECT_RESULT, result);
+        State.note(c, State.LAST_COLLECT_AT, State.LAST_COLLECT_RESULT, result + " (" + trigger + ")");
         requestUpload(c);
         notifySafely(c);
         return result;
@@ -99,7 +101,7 @@ public class CollectorJob extends JobService {
             boolean retry = false;
             try {
                 if (params.getJobId() == COLLECT) {
-                    collectNow(this);
+                    collectNow(this, BY_SCHEDULE);
                 } else {
                     retry = uploadNow(this).outcome == DriveUploader.Outcome.RETRY;
                 }

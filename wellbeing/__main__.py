@@ -135,7 +135,8 @@ def cmd_where(args) -> int:
             zone = None
         when = (datetime.fromtimestamp(collected / 1000, zone).strftime("%Y-%m-%d %H:%M")
                 if collected else "unknown")
-        print(f"inbox:    {inbox} — phone last collected {when}")
+        trigger = inbox_mod.read_device(inbox).get("trigger")
+        print(f"inbox:    {inbox} — phone last collected {when}" + (f" ({trigger})" if trigger else ""))
         stale = inbox_mod.staleness(inbox)
         if stale:
             print(f"          WARNING: {stale}")

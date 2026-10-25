@@ -162,7 +162,7 @@ public class DumpActivity extends Activity {
 
     private void runNow() {
         background("Collecting…", () -> {
-            CollectorJob.collectNow(this);
+            CollectorJob.collectNow(this, CollectorJob.BY_RUN_NOW);
             if (DriveAuth.connected(this)) {
                 runOnUiThread(() -> runNow.setText("Uploading…"));
                 CollectorJob.uploadNow(this);

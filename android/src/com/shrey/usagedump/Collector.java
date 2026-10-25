@@ -88,7 +88,7 @@ final class Collector {
      * snapshots. Starting at a midnight is what makes each rewritten day file
      * complete rather than a tail.
      */
-    String collect() throws IOException {
+    String collect(String trigger) throws IOException {
         synchronized (LOCK) {
             if (!hasUsageAccess(ctx)) {
                 // Without access every query returns nothing; writing that out
@@ -114,7 +114,7 @@ final class Collector {
                     tmp -> writeEventStats(tmp, bucketsBegin, now), false);
             int configs = commitTo(new File(snaps, "configs-" + today + ".csv"),
                     tmp -> writeConfigurations(tmp, bucketsBegin, now), false);
-            writeDeviceJson(now, ev[0]);
+            writeDeviceJson(now, ev[0], trigger);
 
             String summary = ev[0] + " events over " + ev[1] + " days, " + buckets + " buckets, "
                     + estats + " counters, " + configs + " configs";
@@ -217,7 +217,7 @@ final class Collector {
         return Math.max(n, 0);
     }
 
-    private void writeDeviceJson(long now, int events) throws IOException {
+    private void writeDeviceJson(long now, int events, String trigger) throws IOException {
         String version = "";
         try {
             version = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0).versionName;
@@ -232,6 +232,9 @@ final class Collector {
             o.put("app_version", version);
             o.put("collected_at_ms", now);
             o.put("events_this_run", events);
+            // What started this collection: "schedule" (the 6-hourly job),
+            // "run now", or "dashboard" -- so a run nobody started can be told apart.
+            o.put("trigger", trigger);
             w.write(o.toString(2));
             w.write("\n");
         } catch (org.json.JSONException ex) {

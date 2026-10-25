@@ -131,7 +131,7 @@ public class DashboardActivity extends Activity {
         /** "Collect now" on the page: the same collect as the job, which also queues an upload. */
         @JavascriptInterface
         public String collectNow() {
-            String result = CollectorJob.collectNow(c);
+            String result = CollectorJob.collectNow(c, CollectorJob.BY_DASHBOARD);
             JSONObject o = new JSONObject();
             try {
                 o.put("ok", !result.startsWith("failed")).put("message", result);

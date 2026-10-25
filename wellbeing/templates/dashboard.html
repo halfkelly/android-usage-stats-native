@@ -127,6 +127,9 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 #help dd { margin: 0; color: var(--text-2); }
 #help .note { color: var(--text-3); font-size: 13px; margin: 8px 0 0; }
 @media (max-width: 560px) { #help dl { grid-template-columns: 1fr; } #help dd { margin-bottom: 6px; } }
+#avail a { color: var(--series); cursor: pointer; text-decoration: none; }
+#avail a:hover { text-decoration: underline; }
+#avail .gap { color: var(--text-3); }
 </style>
 
 <div class="wrap">
@@ -134,6 +137,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
     <h1>Phone usage</h1>
     <span class="sub" id="cov"></span>
   </header>
+  <p class="sub" id="avail" style="margin:0 0 14px"></p>
 
   <div class="controls">
     <div class="seg" id="range" role="group" aria-label="Date range">
@@ -714,6 +718,36 @@ async function saveExclusions() {
   window.scrollTo(0, pageY);
 }
 
+/* Which dates have data: runs of consecutive days, each one clickable, and the
+   gaps between them named -- a missing week should read as missing, not as a
+   week of not using the phone. */
+function drawAvailable(days) {
+  const host = document.getElementById("avail");
+  if (!days.length) { host.textContent = "No data yet."; return; }
+  const DAY = 86400000, t = d => Date.parse(d + "T00:00Z"), iso = ms => new Date(ms).toISOString().slice(0, 10);
+  const short = d => new Date(d + "T00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const runs = [];
+  for (const d of days) {
+    const last = runs[runs.length - 1];
+    if (last && t(d) - t(last[1]) === DAY) last[1] = d; else runs.push([d, d]);
+  }
+  const parts = [];
+  runs.forEach(([a, b], i) => {
+    if (i) {
+      const ga = iso(t(runs[i - 1][1]) + DAY), gb = iso(t(a) - DAY);
+      parts.push(`<span class="gap">· no data ${ga === gb ? short(ga) : short(ga) + " – " + short(gb)} ·</span>`);
+    }
+    parts.push(`<a data-a="${a}" data-b="${b}" title="Show this period">${a === b ? short(a) : short(a) + " – " + short(b)}</a>`);
+  });
+  host.innerHTML = `Data available (${days.length} day${days.length === 1 ? "" : "s"}): ` + parts.join(" ");
+  host.querySelectorAll("a").forEach(el => el.addEventListener("click", () => {
+    state.start = el.dataset.a; state.end = el.dataset.b;
+    fromEl.value = el.dataset.a; toEl.value = el.dataset.b;
+    document.querySelectorAll("#range button").forEach(x => x.removeAttribute("aria-pressed"));
+    load();
+  }));
+}
+
 function render() {
   const d = state.data;
   if (!d) return;
@@ -721,6 +755,7 @@ function render() {
   document.getElementById("cov").textContent = cov.days.length
     ? `${d.start} → ${d.end} · ${cov.event_count.toLocaleString()} events from ${cov.sync_count} sync${cov.sync_count === 1 ? "" : "s"}`
     : "no data yet";
+  safe("available", () => drawAvailable(cov.days));
   // The phone works unattended, so this is the one place a stopped phone shows up.
   const warn = document.getElementById("phone-warning");
   warn.hidden = !d.phone_warning;

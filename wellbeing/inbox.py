@@ -98,6 +98,16 @@ def _mark(conn, inbox: Path, path: Path) -> None:
         (str(path.relative_to(inbox)), st.st_mtime_ns, st.st_size, int(time.time() * 1000)))
 
 
+def has_changes(conn, inbox: Path) -> bool:
+    """Is there anything ingest_inbox would read? Cheap: file sizes and mtimes."""
+    files = [path for kind, _d, path in _day_files(inbox / "events") if kind == "events"]
+    newest = {}
+    for kind, _d, path in _day_files(inbox / "snapshots"):
+        if kind in SNAPSHOT_KINDS:
+            newest[kind] = path
+    return any(_changed(conn, inbox, f) for f in files + list(newest.values()))
+
+
 def ingest_inbox(conn, inbox: Path, *, fetch_labels: bool = False, everything: bool = False) -> dict:
     """Ingest every changed day file, then the newest snapshots.
 

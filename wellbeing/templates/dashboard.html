@@ -112,6 +112,21 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 .chain li:last-child { border-bottom: 0; }
 .chain .n { margin-left: auto; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .chain .meter { height: 6px; border-radius: 3px; background: var(--series); flex: 0 0 auto; }
+
+/* "How to read this": every term on the page and the assumptions behind it. */
+#help { max-width: 760px; width: calc(100% - 32px); max-height: 85vh; padding: 0;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+#help::backdrop { background: rgb(0 0 0 / .45); }
+#help .head { position: sticky; top: 0; display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+#help .head h2 { margin: 0; font-size: 16px; flex: 1; }
+#help .body { padding: 4px 20px 20px; font-size: 14px; line-height: 1.55; }
+#help h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 20px 0 6px; }
+#help dl { margin: 0; display: grid; grid-template-columns: minmax(130px, 28%) 1fr; gap: 6px 16px; }
+#help dt { font-weight: 600; }
+#help dd { margin: 0; color: var(--text-2); }
+#help .note { color: var(--text-3); font-size: 13px; margin: 8px 0 0; }
+@media (max-width: 560px) { #help dl { grid-template-columns: 1fr; } #help dd { margin-bottom: 6px; } }
 </style>
 
 <div class="wrap">
@@ -135,6 +150,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
     </label>
     <span class="spacer"></span>
     <span class="sub" id="syncmsg"></span>
+    <button class="btn" id="help-open" aria-haspopup="dialog">How to read this</button>
     <button class="btn" id="sync">Get phone data</button>
     <button class="btn" id="stop" title="Stop the dashboard server. The phone keeps collecting.">Stop dashboard</button>
   </div>
@@ -221,6 +237,63 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
     </details>
   </div>
 </div>
+<dialog id="help" aria-labelledby="help-title">
+  <div class="head"><h2 id="help-title">How to read this dashboard</h2>
+    <button class="btn" id="help-close">Close</button></div>
+  <div class="body">
+    <h3>Where the numbers come from</h3>
+    <dl>
+      <dt>Collection</dt><dd>The Usage Dump app on the phone records Android's own usage events every 6 hours and uploads them to Google Drive. Opening this page, or <b>Get phone data</b>, reads the latest upload, so the newest data can be up to about 6 hours old. <b>Run now</b> in the app makes it current.</dd>
+      <dt>Days and hours</dt><dd>Cut in India time (Asia/Kolkata). A day runs from midnight to midnight.</dd>
+      <dt>Date range</dt><dd><b>Today</b> and <b>Yesterday</b>, or any range with the two date boxes. Click a bar in "Screen time per day" to see that day alone.</dd>
+    </dl>
+
+    <h3>Screen time and apps</h3>
+    <dl>
+      <dt>Screen time</dt><dd>Time an app was on screen in the foreground. It stops when the screen turns off or the phone locks, so an app left open overnight doesn't count.</dd>
+      <dt>System UI</dt><dd>The status bar, keyboard, permission pop-ups and edge panel are left out unless <b>count system UI</b> is ticked. The home screen (One UI Home) is counted.</dd>
+      <dt>Opened / visit</dt><dd>One stretch of an app on screen. Leaving and coming back within 5 seconds (e.g. switching screens inside the app) is the same visit.</dd>
+      <dt>Typical visit</dt><dd>The median visit: half the visits were shorter, half longer.</dd>
+      <dt>Longest sitting</dt><dd>The single longest visit. A visit is capped at 6 hours, because anything longer means the phone never recorded its end.</dd>
+      <dt>What it connects to</dt><dd>The app used immediately before and after, skipping the home screen and system UI in between.</dd>
+      <dt>Excluded apps</dt><dd>Apps unticked under "Exclude apps from totals" vanish from every app-based figure. Unlocks, notifications and pick-up counts are about the phone, so they don't change.</dd>
+    </dl>
+
+    <h3>Unlocks and notifications</h3>
+    <dl>
+      <dt>Unlocks</dt><dd>Each time the lock screen was dismissed (PIN, fingerprint or face).</dd>
+      <dt>Notifications</dt><dd>Notifications that interrupt: shown with sound, vibration or a pop-up. Silent ones aren't counted.</dd>
+    </dl>
+
+    <h3>Assumptions about your day</h3>
+    <dl>
+      <dt>Waking day</dt><dd>16 hours. "Share of a 16h waking day" is screen time divided by 16 hours, since most of the other 8 are sleep.</dd>
+      <dt>Wake-up time</dt><dd>The first time any app was used that day.</dd>
+      <dt>Bedtime</dt><dd>The last time any app was used that day.</dd>
+      <dt>First thing on waking</dt><dd>An app counts if its first use came within 10 minutes of the phone's first use that day.</dd>
+      <dt>Last thing before sleep</dt><dd>An app counts if its last use came within 10 minutes of the phone's last use that day.</dd>
+      <dt>Parts of the day</dt><dd>Night 23:30–07:00 · Morning 07:00–12:00 · Afternoon 12:00–17:00 · Evening 17:00–20:00 · Late 20:00–22:30 · Pre-bed 22:30–23:30.</dd>
+    </dl>
+    <p class="note">The day boundary is midnight, not sleep. If you use the phone at 00:30 before sleeping, that counts as the <i>next</i> day's wake-up time, and the previous day's bedtime is the last use before midnight. Late nights therefore look like early starts.</p>
+
+    <h3>Pick-ups</h3>
+    <dl>
+      <dt>Pick-up</dt><dd>The screen came on and the phone was unlocked. It lasts from screen-on to screen-off.</dd>
+      <dt>Glance</dt><dd>The screen came on but the phone wasn't unlocked: checking the time or a notification on the lock screen.</dd>
+      <dt>Micro</dt><dd>A pick-up shorter than 30 seconds.</dd>
+      <dt>Impulse</dt><dd>A pick-up with no notification in the 2 minutes before the unlock. Only notifications since the phone was last locked count, so one you'd already seen doesn't explain a later pick-up.</dd>
+      <dt>Typical pick-up</dt><dd>The median length of a pick-up.</dd>
+      <dt>Where pick-ups lead</dt><dd>The first app opened after unlocking, skipping the home screen, keyboard and system UI.</dd>
+    </dl>
+    <p class="note">The summary row's "unlocks under 30s" and "with no notification" are older, slightly different measures: they time from the unlock to the next lock, where the Pick-ups card times from screen-on to screen-off. A pick-up still in progress isn't counted until it ends, so today's pick-ups can trail today's unlocks.</p>
+
+    <h3>Limits</h3>
+    <dl>
+      <dt>History</dt><dd>The phone keeps detailed events for only about 10 days, so a day that was never collected in time is gone. Since the app collects every 6 hours, that only happens if the phone is off or the app is stopped for days.</dd>
+      <dt>Profiles</dt><dd>Only the main phone profile is read; Secure Folder and work profiles are not.</dd>
+    </dl>
+  </div>
+</dialog>
 <div id="tip" role="status"></div>
 
 <script>
@@ -733,9 +806,12 @@ document.getElementById("stop").addEventListener("click", async () => {
     '<p>You can close this tab. The phone keeps collecting and uploading on its own.</p>' +
     '<p>To open it again, double-click <b>Phone Usage Dashboard</b> on the Desktop.</p></div>';
 });
-document.getElementById("sync").addEventListener("click", async () => {
+// Runs by itself once the page has drawn, so the dashboard opens at once on
+// what is already here and then catches up with Drive in the background.
+async function syncFromDrive(auto) {
   const btn = document.getElementById("sync"), msg = document.getElementById("syncmsg");
-  btn.disabled = true; msg.className = "sub"; msg.textContent = "reading the phone's uploads…";
+  btn.disabled = true; msg.className = "sub";
+  msg.textContent = auto ? "checking Drive for new phone data…" : "reading the phone's uploads…";
   try {
     const r = await fetch("/api/sync", { method: "POST" });
     const j = await r.json();
@@ -743,15 +819,23 @@ document.getElementById("sync").addEventListener("click", async () => {
     const when = j.phone_collected_at_ms
       ? new Date(j.phone_collected_at_ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
       : "never";
-    msg.textContent = `+${j.events_added} events · phone last collected ${when} · archive +${j.archive_rows_added} rows` +
+    msg.textContent = (j.events_added ? `+${j.events_added} new events` : "up to date") +
+      ` · phone last collected ${when}` +
       (j.refused.length ? ` · ${j.refused.length} file(s) skipped, see ingest-phone` : "");
-    await load();
+    if (j.events_added || !auto) await load();
   } catch (err) {
     msg.className = "err"; msg.textContent = String(err.message || err);
   } finally {
     btn.disabled = false;
   }
-});
+}
+document.getElementById("sync").addEventListener("click", () => syncFromDrive(false));
+const help = document.getElementById("help");
+document.getElementById("help-open").addEventListener("click", () => help.showModal());
+document.getElementById("help-close").addEventListener("click", () => help.close());
+help.addEventListener("click", e => { if (e.target === help) help.close(); });  // click outside closes
+if (location.hash === "#help") help.showModal();  // a link straight to the explanations
+
 addEventListener("resize", () => render());
-load();
+load().then(() => syncFromDrive(true));
 </script>

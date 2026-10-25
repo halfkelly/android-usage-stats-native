@@ -32,8 +32,11 @@ write into folders it made.
 
 Nothing is needed. To see the numbers:
 
-- **Open dashboard.bat**, or `./dashboard.sh`: imports, reads the phone's
-  uploads, and serves http://127.0.0.1:5000.
+- **Phone Usage Dashboard** on the Desktop (a copy of `Open dashboard.bat`),
+  or `./dashboard.sh`: the page opens in about 3 seconds on what's already
+  here, then checks Drive for the phone's latest uploads in the background and
+  updates itself. **How to read this** explains every figure and assumption;
+  **Stop dashboard** shuts the server down (closing the tab is fine too).
 - To pull in the latest right now: tap **Run now** in the Usage Dump app, give
   Drive a minute, then click **Get phone data** on the dashboard, or
   double-click **Sync my phone.bat**.

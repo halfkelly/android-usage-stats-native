@@ -105,42 +105,43 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             return jsonify({"ok": False, "error": str(exc)}), 400
         return jsonify({"ok": True, "excluded_apps": saved})
 
+    sync_lock = threading.Lock()
+
     @app.post("/api/sync")
     def do_sync():
-        """Read what the phone uploaded to Drive and write the shared archive.
+        """Read what the phone uploaded to Drive; export only if something came in.
 
-        The phone collects and uploads on its own (android/DRIVE_SETUP.md), so
-        nothing here talks to it: this ingests My Drive/PhoneUsage/phone, then exports,
-        exactly like `wellbeing ingest-phone`.
+        The page calls this by itself on every load, in the background, so it
+        has to be cheap when nothing is new: the full archive import (~20 s)
+        runs only for an empty database, and the export (~10 s) only after new
+        files. One at a time -- a second tab waits for the first.
         """
         c = conn()
-        pulled = None
-        try:
-            sync_mod.backup_db(c)
-            # The archive first, so the database is whole even if the inbox
-            # has nothing new.
-            pulled = importer.import_archive(c)
-            box = inbox_mod.inbox_dir()
-            if box is None or not box.is_dir():
-                raise FileNotFoundError(
-                    f"no phone inbox at {box or 'My Drive/PhoneUsage/phone'} -- "
-                    "has the phone app connected to Drive yet?")
-            result = inbox_mod.ingest_inbox(c, box)
-            cov = stats.coverage(c)
-            written = export_mod.export_all(c, cov["days"][0], cov["days"][-1]) if cov["days"] else {}
-        except FileNotFoundError as exc:
-            # The import above still happened, so say what did land rather than
-            # reporting a flat failure.
-            return jsonify({"ok": False, "error": str(exc),
-                            "imported": (pulled or {}).get("events_added", 0)}), 409
-        collected = result["device"].get("collected_at_ms")
+        with sync_lock:
+            try:
+                box = inbox_mod.inbox_dir()
+                if box is None or not box.is_dir():
+                    raise FileNotFoundError(
+                        f"no phone inbox at {box or 'My Drive/PhoneUsage/phone'} -- "
+                        "has the phone app connected to Drive yet?")
+                if not c.execute("SELECT 1 FROM events LIMIT 1").fetchone():
+                    importer.import_archive(c)     # a fresh install: start from the archive
+                if inbox_mod.has_changes(c, box):
+                    sync_mod.backup_db(c)          # only when there is something to write
+                result = inbox_mod.ingest_inbox(c, box)
+                written = {}
+                if result["files"] or any(result["snapshots"].values()):
+                    cov = stats.coverage(c)
+                    written = export_mod.export_all(c, cov["days"][0], cov["days"][-1])
+            except FileNotFoundError as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 409
         return jsonify({
             "ok": True,
             "events_added": result["events_added"],
             "files": len(result["files"]),
             "refused": result["refused"],
-            "phone_collected_at_ms": collected,
-            "days": len(cov["days"]),
+            "phone_collected_at_ms": result["device"].get("collected_at_ms"),
+            "phone_warning": inbox_mod.staleness(box),
             "archive_rows_added": sum(added for _total, added in written.values()),
         })
 

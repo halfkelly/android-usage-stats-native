@@ -233,3 +233,14 @@ def test_only_the_dashboard_page_can_stop_the_server(tmp_path, monkeypatch):
     assert not started
     assert client.post("/api/stop", headers={"X-Dashboard": "1"}).get_json() == {"ok": True}
     assert len(started) == 1                                     # exit scheduled, not run here
+
+
+def test_has_changes_is_false_once_everything_is_ingested(tmp_path):
+    root = _inbox(tmp_path)
+    _write(root, "events-2026-10-20.csv", _day(D0))
+    conn = db.connect(tmp_path / "u.db")
+    assert inbox.has_changes(conn, root)
+    inbox.ingest_inbox(conn, root)
+    assert not inbox.has_changes(conn, root)
+    _write(root, "events-2026-10-21.csv", _day(D0 + DAY))
+    assert inbox.has_changes(conn, root)

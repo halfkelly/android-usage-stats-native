@@ -1,4 +1,4 @@
-# adb_usage_stats
+# android-usage-stats-native
 
 Digital Wellbeing style usage statistics from a Samsung phone, shown as a
 local dashboard on Windows (WSL). No root. The phone collects and uploads on
@@ -59,8 +59,8 @@ current even if you never press anything.
 2. The code, in the Linux home (not under `/mnt/c`):
    ```bash
    sudo apt install -y python3-venv git
-   git clone git@github.com:Shrey97/adb-usage-stats.git ~/adb_usage_stats
-   cd ~/adb_usage_stats && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+   git clone git@github.com:Shrey97/android-usage-stats-native.git ~/android-usage-stats-native
+   cd ~/android-usage-stats-native && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
    ```
 3. `.venv/bin/python -m wellbeing where` should show the archive in Drive and
    `timezone: Asia/Kolkata`. Every day and hour is cut in the archive's zone,

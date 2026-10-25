@@ -1,206 +1,231 @@
 package com.shrey.usagedump;
 
 import android.app.Activity;
-import android.app.usage.ConfigurationStats;
-import android.app.usage.EventStats;
-import android.app.usage.UsageEvents;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
-import android.content.Context;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
+import android.text.format.DateUtils;
 import android.util.Log;
+import android.util.TypedValue;
+import android.view.View;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.util.List;
 
 /**
- * Dumps everything UsageStatsManager will hand over, as CSV, then exits.
+ * The status screen: what was collected and uploaded, and the one-time setup
+ * (usage access, battery, Drive). The real work runs in CollectorJob; nothing
+ * here needs to be opened for collection to happen.
  *
- * `dumpsys usagestats` only prints the service's in-memory buckets (24h of
- * events plus the current rolling totals). queryUsageStats/queryEvents read the
- * persisted store behind them, which reaches further back.
+ * Launched by adb with `--ei days N` (`wellbeing deep-sync`, the legacy path)
+ * it instead writes the four flat CSVs and exits, as it always did.
  */
 public class DumpActivity extends Activity {
 
-    private static final String TAG = "usagedump";
-
-    private static final int[] INTERVALS = {
-        UsageStatsManager.INTERVAL_DAILY,
-        UsageStatsManager.INTERVAL_WEEKLY,
-        UsageStatsManager.INTERVAL_MONTHLY,
-        UsageStatsManager.INTERVAL_YEARLY,
-    };
-    private static final String[] INTERVAL_NAMES = {"daily", "weekly", "monthly", "yearly"};
+    private TextView status, codeView;
+    private Button access, battery, drive, runNow;
+    private volatile boolean busy;
 
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        int days = getIntent().getIntExtra("days", 400);
+        if (getIntent().hasExtra("days")) {
+            legacyDump(getIntent().getIntExtra("days", Collector.BACKFILL_DAYS));
+            return;
+        }
+        setContentView(buildUi());
+        CollectorJob.schedule(this);
+    }
+
+    private void legacyDump(int days) {
         try {
-            File dir = getExternalFilesDir(null);
-            long end = System.currentTimeMillis();
-            long begin = end - days * 86400000L;
-            int buckets = writeBuckets(new File(dir, "buckets.csv"), begin, end);
-            int events = writeEvents(new File(dir, "events.csv"), begin, end);
-            int estats = writeEventStats(new File(dir, "eventstats.csv"), begin, end);
-            int configs = writeConfigurations(new File(dir, "configs.csv"), begin, end);
-            Log.i(TAG, "OK buckets=" + buckets + " events=" + events
-                    + " eventstats=" + estats + " configs=" + configs + " dir=" + dir);
+            Log.i(Collector.TAG, "OK " + new Collector(this).dumpFlat(days));
         } catch (Exception e) {
-            Log.e(TAG, "FAILED", e);
+            Log.e(Collector.TAG, "FAILED", e);
         }
         finish();
     }
 
-    private int writeBuckets(File out, long begin, long end) throws IOException {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        int rows = 0;
-        Writer w = writer(out);
-        try {
-            w.write("interval,begin_ms,end_ms,package,total_foreground_ms,total_visible_ms,"
-                    + "total_fs_ms,last_used_ms,last_visible_ms,last_fs_ms,last_component_ms\n");
-            for (int i = 0; i < INTERVALS.length; i++) {
-                List<UsageStats> stats = usm.queryUsageStats(INTERVALS[i], begin, end);
-                if (stats == null) continue;
-                for (UsageStats s : stats) {
-                    // Every stored bucket is emitted as its own row, keyed by its
-                    // own timestamps -- aggregating here would throw away the day
-                    // boundaries that make this worth querying at all.
-                    w.write(INTERVAL_NAMES[i] + "," + s.getFirstTimeStamp() + ","
-                            + s.getLastTimeStamp() + "," + csv(s.getPackageName()) + ","
-                            + s.getTotalTimeInForeground() + "," + totalVisible(s) + ","
-                            + totalFs(s) + "," + s.getLastTimeUsed() + ","
-                            + lastVisible(s) + "," + lastFs(s) + "," + lastComponent(s) + "\n");
-                    rows++;
-                }
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (status != null) refresh();
+    }
+
+    private View buildUi() {
+        int pad = dp(16);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(pad, pad, pad, pad);
+
+        status = new TextView(this);
+        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        status.setLineSpacing(0, 1.25f);
+        col.addView(status);
+
+        codeView = new TextView(this);
+        codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        codeView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        codeView.setPadding(0, pad, 0, 0);
+        codeView.setTextIsSelectable(true);
+        codeView.setVisibility(View.GONE);
+        col.addView(codeView);
+
+        runNow = button(col, "Run now", v -> runNow());
+        access = button(col, "Grant usage access",
+                v -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+        battery = button(col, "Let it run in the background", v -> askBattery());
+        drive = button(col, "Connect Google Drive", v -> onDrive());
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(col);
+        return scroll;
+    }
+
+    private Button button(LinearLayout parent, String label, View.OnClickListener l) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setOnClickListener(l);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(12);
+        parent.addView(b, lp);
+        return b;
+    }
+
+    private void refresh() {
+        SharedPreferences p = State.get(this);
+        File root = new Collector(this).root();
+        String[] days = new File(root, "events").list((d, n) -> n.endsWith(".csv"));
+        boolean hasAccess = Collector.hasUsageAccess(this);
+        boolean unrestricted = getSystemService(PowerManager.class)
+                .isIgnoringBatteryOptimizations(getPackageName());
+        boolean connected = DriveAuth.connected(this);
+
+        StringBuilder s = new StringBuilder();
+        s.append("Collected: ").append(when(p, State.LAST_COLLECT_AT)).append('\n')
+                .append("  ").append(p.getString(State.LAST_COLLECT_RESULT, "—")).append('\n')
+                .append("Days on the phone: ").append(days == null ? 0 : days.length).append("\n\n");
+        if (!DriveAuth.configured()) {
+            s.append("Drive: not set up in this build (see android/DRIVE_SETUP.md)\n");
+        } else if (connected) {
+            s.append("Drive: connected, uploading to My Drive/").append(DriveUploader.INBOX).append('\n')
+                    .append("Uploaded: ").append(when(p, State.LAST_UPLOAD_AT)).append('\n')
+                    .append("  ").append(p.getString(State.LAST_UPLOAD_RESULT, "—")).append('\n')
+                    .append("Waiting to upload: ").append(DriveUploader.pending(this, root))
+                    .append(" files\n");
+        } else if (p.getBoolean(State.NEEDS_RECONNECT, false)) {
+            s.append("Drive: access expired — reconnect. Collection carries on meanwhile.\n");
+        } else {
+            s.append("Drive: not connected\n");
+        }
+        s.append('\n')
+                .append(hasAccess ? "✓ Usage access granted\n" : "✗ Usage access missing — nothing can be collected\n")
+                .append(unrestricted ? "✓ Allowed to run in the background\n"
+                        : "✗ Battery-restricted — scheduled runs may be skipped\n");
+        status.setText(s);
+
+        access.setVisibility(hasAccess ? View.GONE : View.VISIBLE);
+        battery.setVisibility(unrestricted ? View.GONE : View.VISIBLE);
+        drive.setVisibility(DriveAuth.configured() ? View.VISIBLE : View.GONE);
+        drive.setText(connected ? "Disconnect Google Drive" : "Connect Google Drive");
+        runNow.setEnabled(!busy);
+        drive.setEnabled(!busy);
+    }
+
+    private static String when(SharedPreferences p, String key) {
+        long t = p.getLong(key, 0L);
+        return t == 0L ? "never" : DateUtils.getRelativeTimeSpanString(t).toString();
+    }
+
+    private void runNow() {
+        background("Collecting…", () -> {
+            CollectorJob.collectNow(this);
+            if (DriveAuth.connected(this)) {
+                runOnUiThread(() -> runNow.setText("Uploading…"));
+                CollectorJob.uploadNow(this);
             }
-        } finally {
-            w.close();
-        }
-        return rows;
+        });
     }
 
-    private int writeEvents(File out, long begin, long end) throws IOException {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        UsageEvents events = usm.queryEvents(begin, end);
-        int rows = 0;
-        Writer w = writer(out);
-        try {
-            w.write("ts_ms,type,package,class\n");
-            UsageEvents.Event e = new UsageEvents.Event();
-            while (events != null && events.hasNextEvent()) {
-                events.getNextEvent(e);
-                w.write(e.getTimeStamp() + "," + e.getEventType() + ","
-                        + csv(e.getPackageName()) + "," + csv(e.getClassName()) + "\n");
-                rows++;
+    private void askBattery() {
+        Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:" + getPackageName()));
+        startActivity(i);
+    }
+
+    private void onDrive() {
+        if (DriveAuth.connected(this)) {
+            background("Disconnecting…", () -> DriveAuth.disconnect(this));
+            return;
+        }
+        background("Signing in…", () -> {
+            DriveAuth.DeviceCode dc;
+            try {
+                dc = DriveAuth.start();
+            } catch (Exception e) {
+                toastStatus("Couldn't start sign-in: " + e.getMessage());
+                return;
             }
-        } finally {
-            w.close();
-        }
-        return rows;
-    }
-
-    // Each of these arrived in a later API level than minSdk, and a vendor build
-    // can omit one; a missing field must not lose the whole row.
-    private static long totalVisible(UsageStats s) {
-        try { return s.getTotalTimeVisible(); } catch (Throwable t) { return 0L; }
-    }
-
-    private static long totalFs(UsageStats s) {
-        try { return s.getTotalTimeForegroundServiceUsed(); } catch (Throwable t) { return 0L; }
-    }
-
-    private static long lastVisible(UsageStats s) {
-        try { return s.getLastTimeVisible(); } catch (Throwable t) { return 0L; }
-    }
-
-    private static long lastFs(UsageStats s) {
-        try { return s.getLastTimeForegroundServiceUsed(); } catch (Throwable t) { return 0L; }
-    }
-
-    // getLastTimeAnyComponentUsed() is not in the public SDK even though the
-    // field is populated and shows up in dumpsys, so it is read reflectively.
-    private static long lastComponent(UsageStats s) {
-        try {
-            return (Long) UsageStats.class.getMethod("getLastTimeAnyComponentUsed").invoke(s);
-        } catch (Throwable t) {
-            return 0L;
-        }
-    }
-
-    /**
-     * Device-wide counters: screen on/off and keyguard, each with a count AND a
-     * total duration. Screen-on time here is independent of app attribution, so
-     * screen-on minus app-foreground gives idle screen time -- a figure the
-     * per-package buckets cannot produce.
-     */
-    private int writeEventStats(File out, long begin, long end) throws IOException {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        int rows = 0;
-        Writer w = writer(out);
-        try {
-            w.write("interval,begin_ms,end_ms,event_type,count,total_time_ms,last_event_ms\n");
-            for (int i = 0; i < INTERVALS.length; i++) {
-                List<EventStats> stats;
-                try {
-                    stats = usm.queryEventStats(INTERVALS[i], begin, end);
-                } catch (Throwable t) {
-                    continue;
-                }
-                if (stats == null) continue;
-                for (EventStats s : stats) {
-                    w.write(INTERVAL_NAMES[i] + "," + s.getFirstTimeStamp() + ","
-                            + s.getLastTimeStamp() + "," + s.getEventType() + ","
-                            + s.getCount() + "," + s.getTotalTime() + ","
-                            + s.getLastEventTime() + "\n");
-                    rows++;
-                }
+            final DriveAuth.DeviceCode code = dc;
+            runOnUiThread(() -> showCode(code));
+            try {
+                DriveAuth.await(this, code);
+            } catch (Exception e) {
+                toastStatus("Not connected: " + e.getMessage());
+                return;
             }
-        } finally {
-            w.close();
-        }
-        return rows;
+            runOnUiThread(() -> codeView.setVisibility(View.GONE));
+            CollectorJob.uploadNow(this);
+        });
     }
 
-    /** Time per device configuration -- orientation, night mode, locale, density. */
-    private int writeConfigurations(File out, long begin, long end) throws IOException {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        int rows = 0;
-        Writer w = writer(out);
-        try {
-            w.write("interval,begin_ms,end_ms,config,activations,total_active_ms,last_active_ms\n");
-            for (int i = 0; i < INTERVALS.length; i++) {
-                List<ConfigurationStats> stats;
-                try {
-                    stats = usm.queryConfigurations(INTERVALS[i], begin, end);
-                } catch (Throwable t) {
-                    continue;
-                }
-                if (stats == null) continue;
-                for (ConfigurationStats s : stats) {
-                    w.write(INTERVAL_NAMES[i] + "," + s.getFirstTimeStamp() + ","
-                            + s.getLastTimeStamp() + "," + csv(String.valueOf(s.getConfiguration()))
-                            + "," + s.getActivationCount() + "," + s.getTotalTimeActive()
-                            + "," + s.getLastTimeActive() + "\n");
-                    rows++;
-                }
+    private void showCode(DriveAuth.DeviceCode dc) {
+        ClipboardManager cb = getSystemService(ClipboardManager.class);
+        cb.setPrimaryClip(ClipData.newPlainText("Google code", dc.userCode));
+        codeView.setText("Enter this code at\n" + dc.verificationUrl + "\n\n" + dc.userCode
+                + "\n\n(copied — sign in, allow access, then come back)");
+        codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        codeView.setVisibility(View.VISIBLE);
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(dc.verificationUrl)));
+    }
+
+    private void toastStatus(String msg) {
+        runOnUiThread(() -> {
+            codeView.setText(msg);
+            codeView.setVisibility(View.VISIBLE);
+        });
+    }
+
+    /** Run off the main thread with the buttons disabled, then refresh. */
+    private void background(String label, Runnable work) {
+        busy = true;
+        runNow.setText(label);
+        refresh();
+        new Thread(() -> {
+            try {
+                work.run();
+            } finally {
+                runOnUiThread(() -> {
+                    busy = false;
+                    runNow.setText("Run now");
+                    refresh();
+                });
             }
-        } finally {
-            w.close();
-        }
-        return rows;
+        }, "usagedump-ui").start();
     }
 
-    private static String csv(String v) {
-        if (v == null) return "";
-        return v.indexOf(',') >= 0 ? "\"" + v + "\"" : v;
-    }
-
-    private static Writer writer(File f) throws IOException {
-        return new OutputStreamWriter(new FileOutputStream(f), "UTF-8");
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.shrey.usagedump"
-    android:versionCode="1" android:versionName="1.0">
+    android:versionCode="2" android:versionName="2.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -10,14 +10,24 @@
          It reads Android's persisted usage buckets, the same store Digital
          Wellbeing uses, which is deeper than what dumpsys usagestats prints. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <!-- Drive upload (drive.file scope only; see DriveAuth). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Lets the persisted 6-hourly job survive a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Only to show the "allow background" prompt; One UI otherwise skips jobs. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application android:label="Usage Dump" android:debuggable="true"
-                 android:allowBackup="false">
+                 android:allowBackup="false"
+                 android:theme="@android:style/Theme.DeviceDefault.Light">
         <activity android:name=".DumpActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".CollectorJob"
+                 android:permission="android.permission.BIND_JOB_SERVICE"
+                 android:exported="false" />
     </application>
 </manifest>

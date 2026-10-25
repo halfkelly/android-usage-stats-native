@@ -17,3 +17,6 @@ raw/
 android/build/*
 !android/build/usagedump.apk
 android/debug.keystore
+
+# The Drive OAuth client for the APK (android/DRIVE_SETUP.md)
+android/oauth.properties

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Refresh this machine's database from the shared archive, then serve it.
-# No phone needed -- this is how a second computer views the dashboard.
+# Refresh this machine's database from the shared archive and the phone's
+# Drive inbox, then serve it. The phone never needs to be connected.
 set -uo pipefail
 cd "$(dirname "$0")"
 PY=.venv/bin/python
 
 "$PY" -m wellbeing import || echo "  (couldn't read the shared archive -- serving what's already local)"
+# Then whatever the phone uploaded since, which also updates the archive.
+"$PY" -m wellbeing ingest-phone || echo "  (no new phone data read -- see above)"
 
 pkill -f "wellbeing serve" 2>/dev/null
 sleep 1

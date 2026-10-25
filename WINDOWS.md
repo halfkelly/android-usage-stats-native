@@ -17,6 +17,33 @@ and each keep their own derived SQLite database.
   got its copy, and what task 1 replaces
 - Read `DATA.md` for the archive format and `README.md` for setup
 
+## Building the phone app (2026-10-25)
+
+The phone now collects and uploads on its own (README, "How it works"). The
+APK is built here, on WSL, without Gradle. The toolchain lives in `tools/`,
+which is gitignored. It was set up without sudo:
+
+```bash
+mkdir -p tools/dl && cd tools/dl
+curl -sSfL -o jdk.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
+curl -sSfL -o cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+cd .. && mkdir -p jdk-linux sdk/cmdline-tools
+tar -xzf dl/jdk.tar.gz -C jdk-linux --strip-components=1
+unzip -q dl/cmdline.zip -d sdk/cmdline-tools && mv sdk/cmdline-tools/cmdline-tools sdk/cmdline-tools/latest
+JAVA_HOME=$PWD/jdk-linux yes | sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$PWD/sdk \
+  "build-tools;34.0.0" "platforms;android-34"
+rm -rf dl && cd ..
+bash android/build.sh
+```
+
+- `android/debug.keystore` is generated on the first build and is **not in
+  git**. Keep it: an APK signed with a different key can't update the
+  installed app, which means an uninstall and a fresh grant of usage access
+  and Drive.
+- `android/oauth.properties` (also not in git) holds the Drive OAuth client;
+  see `android/DRIVE_SETUP.md`. Without it the build still works, the app just
+  can't upload.
+
 ## Do these, then run the acceptance tests below
 
 ### Remaining work

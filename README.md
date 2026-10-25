@@ -1,7 +1,45 @@
 # adb_usage_stats
 
-Pulls Digital Wellbeing style usage statistics off a Samsung phone over USB and
-serves them as a local dashboard. No root, and nothing installed on the phone.
+Digital Wellbeing style usage statistics from a Samsung phone, served as a local
+dashboard. No root. The phone collects and uploads on its own. The computer
+never has to connect to it.
+
+## How it works (since 2026-10-25)
+
+```
+phone   Usage Dump app, every 6 h, no network needed
+          collects raw CSVs -> uploads changed files to My Drive/PhoneUsageInbox/
+                                (its own drive.file permission: it sees only its own files)
+PC      Drive for desktop syncs PhoneUsageInbox
+          wellbeing ingest-phone -> data/usage.db -> PhoneUsageBackup/ archive -> dashboard
+```
+
+The phone forgets raw events after about 10 days. The adb workflow below lost
+data whenever nobody synced. The app now writes every day out within 6 hours,
+whether or not a computer is around.
+
+**One time, phone side:**
+
+1. Build the APK: `bash android/build.sh`. WINDOWS.md, "Building the phone
+   app", covers the toolchain. For Drive upload, do the Google Cloud setup in
+   [android/DRIVE_SETUP.md](android/DRIVE_SETUP.md) first, so the build has a
+   client id.
+2. Copy `android/build/usagedump.apk` to Drive, open it on the phone, and allow
+   "install unknown apps" for Drive. (An older Usage Dump signed on the Mac
+   has to be uninstalled first. The usage data is Android's, so nothing is
+   lost.)
+3. Open **Usage Dump** and tap each button it shows: **Grant usage access**,
+   **Let it run in the background**, **Connect Google Drive**. Then tap
+   **Run now** once. The status screen should show about 10 days of files
+   and an upload.
+
+**Day to day, PC side:** `./dashboard.sh` (it runs `import`, then
+`ingest-phone`, then serves), or the dashboard's **Get phone data** button.
+`wellbeing where` shows when the phone last collected. In Drive for desktop,
+mark `PhoneUsageInbox` **Available offline**, as for `PhoneUsageBackup`.
+
+Everything below about USB, wireless debugging and `sync` / `deep-sync` is the
+**legacy path**. It still works but isn't needed.
 
 ## Where the numbers come from
 
@@ -379,6 +417,7 @@ will multiply your screen time.
 
 | Command | Does |
 |---|---|
+| `ingest-phone [DIR]` | read the phone's Drive inbox and update the archive (`--all`, `--no-export`) |
 | `devices` | list attached devices and their state |
 | `sync` | capture from the phone and ingest, last 24h (`--serial`, `--fetch-labels`, `--no-raw`) |
 | `deep-sync` | pull ~10 days via the companion APK (`--days`, `--serial`) |
@@ -405,10 +444,12 @@ wellbeing/
   parse.py     dumpsys parser + session reconstruction
   db.py        SQLite schema
   sync.py      capture → ingest → rebuild derived tables
+  inbox.py     the phone's own uploads (PhoneUsageInbox) → ingest
   stats.py     read-side queries
   labels.py    package id → app name
   server.py    Flask app and JSON API
   templates/dashboard.html
+android/       the phone app: Collector (CSV), CollectorJob (6-hourly), DriveAuth + DriveUploader
 data/usage.db  the history (this is the thing to back up)
 raw/           raw dumps, one per sync
 ```

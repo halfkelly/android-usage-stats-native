@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import (adb, appdump, archive as archive_mod, codecheck, db, export as export_mod,
-               importer as importer_mod, stats, sync as sync_mod)
+               importer as importer_mod, inbox as inbox_mod, stats, sync as sync_mod)
 
 
 def _fmt(ms: int) -> str:
@@ -162,6 +162,47 @@ def cmd_deep_sync(args) -> int:
     return 0
 
 
+def cmd_ingest_phone(args) -> int:
+    """Read the phone's own uploads (PhoneUsageInbox) and update the archive."""
+    inbox = Path(args.source).expanduser() if args.source else inbox_mod.inbox_dir()
+    if inbox is None:
+        print("error: Google Drive not found, so no PhoneUsageInbox. Point at it with "
+              f"${inbox_mod.ENV_VAR}=/path/to/PhoneUsageInbox", file=sys.stderr)
+        return 1
+    conn = db.connect(args.db)
+    try:
+        result = inbox_mod.ingest_inbox(conn, inbox, fetch_labels=args.fetch_labels,
+                                        everything=args.all)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    device = result["device"]
+    phone_tz, pinned = device.get("timezone", ""), os.environ.get("TZ", "")
+    if phone_tz and pinned and phone_tz != pinned:
+        print(f"note: phone timezone {phone_tz} differs from the archive's {pinned}; "
+              f"calendar days follow the archive's zone.", file=sys.stderr)
+    if result["clock_shift_ms"]:
+        print(f"the phone's clock moved {result['clock_shift_ms']:+,} ms since the last capture; "
+              f"timestamps realigned to the stored ones")
+    for msg in result["refused"]:
+        print(f"skipped {msg}", file=sys.stderr)
+    collected = device.get("collected_at_ms")
+    when = datetime.fromtimestamp(collected / 1000).strftime("%Y-%m-%d %H:%M") if collected else "?"
+    snaps = result["snapshots"]
+    print(f"{inbox}  (phone last collected {when})")
+    print(f"  {len(result['files'])} day file(s), {result['events_seen']:,} events, "
+          f"{result['events_added']:,} new; {snaps['buckets']:,} bucket rows, "
+          f"{snaps['eventstats']} counters, {snaps['configs']} configs")
+    if args.no_export or not (result["files"] or any(snaps.values())):
+        return 1 if result["refused"] else 0
+    cov = stats.coverage(conn)
+    if cov["days"]:
+        written = export_mod.export_all(conn, cov["days"][0], cov["days"][-1])
+        added = sum(a for _, a in written.values())
+        print(f"  archive updated: {archive_mod.describe()} (+{added:,} rows)")
+    return 1 if result["refused"] else 0
+
+
 def cmd_export(args) -> int:
     conn = db.connect(args.db)
     cov = stats.coverage(conn)
@@ -211,6 +252,14 @@ def cmd_where(args) -> int:
         print(f"code:     {local} — DIFFERS from the bundle in Drive ({len(differing)} file(s): {names})")
     else:
         print(f"code:     {local} — no bundle found in Drive to compare with")
+    inbox = inbox_mod.inbox_dir()
+    if inbox is None or not inbox.is_dir():
+        print(f"inbox:    {inbox or 'no Google Drive'} — nothing from the phone yet")
+    else:
+        collected = inbox_mod.read_device(inbox).get("collected_at_ms")
+        when = (datetime.fromtimestamp(collected / 1000).strftime("%Y-%m-%d %H:%M")
+                if collected else "unknown")
+        print(f"inbox:    {inbox} — phone last collected {when}")
     print(f"database: {args.db}")
     return 0
 
@@ -291,7 +340,7 @@ def cmd_rebuild(args) -> int:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m wellbeing",
-                                description="Collect Digital Wellbeing style usage stats over adb.")
+                                description="Digital Wellbeing style usage stats, collected by the phone app.")
     p.add_argument("--db", default=str(db.DEFAULT_DB), help="SQLite file (default: data/usage.db)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -329,6 +378,15 @@ def main(argv=None) -> int:
     sp.add_argument("--days", type=int, default=400, help="how far back to ask for")
     sp.add_argument("--fetch-labels", action="store_true")
     sp.set_defaults(func=cmd_deep_sync)
+
+    sp = sub.add_parser("ingest-phone",
+                        help="read what the phone uploaded to Drive (PhoneUsageInbox) and update the archive")
+    sp.add_argument("source", nargs="?", help=f"inbox directory (default: My Drive/{inbox_mod.FOLDER_NAME})")
+    sp.add_argument("--all", action="store_true", help="re-read every file, not just changed ones")
+    sp.add_argument("--no-export", action="store_true", help="database only, skip the archive")
+    sp.add_argument("--fetch-labels", action="store_true",
+                    help="look up unknown app names on the Play Store (sends package names to Google)")
+    sp.set_defaults(func=cmd_ingest_phone)
 
     sp = sub.add_parser("export", help="write the history to CSV files")
     sp.add_argument("--out", help="output directory (default: the shared archive)")

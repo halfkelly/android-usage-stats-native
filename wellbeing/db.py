@@ -127,6 +127,14 @@ CREATE TABLE IF NOT EXISTS garmin_daily (
     sleep_stress INTEGER
 );
 
+-- files from the phone's Drive inbox already ingested, so unchanged ones are skipped
+CREATE TABLE IF NOT EXISTS inbox_files (
+    path        TEXT PRIMARY KEY,
+    mtime_ns    INTEGER NOT NULL,
+    size        INTEGER NOT NULL,
+    ingested_ms INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS syncs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     ts_ms        INTEGER NOT NULL,
@@ -192,21 +200,29 @@ class OverlapError(ValueError):
 OVERLAP_LIMIT = 100
 
 
-def insert_phone_events(conn: sqlite3.Connection, events) -> int:
+def insert_phone_events(conn: sqlite3.Connection, events,
+                        window: tuple[int, int] | None = None) -> int:
     """insert_events for a capture from the phone, refusing one that rewrites history.
 
     `import` from the archive legitimately fills the past and uses insert_events
     directly; a phone capture never should, so it is checked and rolled back.
+
+    `window` (lo, hi) narrows "history" to stored events inside it. A day file
+    from the phone's inbox passes its own first and last timestamps: a day not
+    stored yet may then land in any order, while a rewrite of a stored day is
+    held to the same limit as a whole capture.
     """
-    prior_max = conn.execute("SELECT MAX(ts_ms) FROM events").fetchone()[0]
+    lo, hi = window or (0, 2**62)
+    prior_max = conn.execute("SELECT MAX(ts_ms) FROM events WHERE ts_ms BETWEEN ? AND ?",
+                             (lo, hi)).fetchone()[0]
     if prior_max is None:
         return insert_events(conn, events)
-    count_old = "SELECT COUNT(*) FROM events WHERE ts_ms <= ?"
-    before = conn.execute(count_old, (prior_max,)).fetchone()[0]
+    count_old = "SELECT COUNT(*) FROM events WHERE ts_ms BETWEEN ? AND ?"
+    before = conn.execute(count_old, (lo, prior_max)).fetchone()[0]
     conn.execute("SAVEPOINT phone_events")
     try:
         added = insert_events(conn, events)
-        into_past = conn.execute(count_old, (prior_max,)).fetchone()[0] - before
+        into_past = conn.execute(count_old, (lo, prior_max)).fetchone()[0] - before
         if into_past > OVERLAP_LIMIT:
             raise OverlapError(
                 f"refusing: this capture would add {into_past:,} events to time already "

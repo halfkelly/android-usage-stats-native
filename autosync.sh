@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Quiet, unattended sync. Safe to run on a schedule: if the phone isn't on the
-# network, or another machine is mid-sync, it exits without doing anything.
+# Quiet, unattended sync. Safe to run on a schedule: if the archive isn't
+# reachable, or another machine is mid-sync, it exits without doing anything.
 set -uo pipefail
 cd "$(dirname "$0")"
 PY=.venv/bin/python
@@ -55,10 +55,8 @@ trap 'rm -f "$LOCK"' EXIT
 IMPORTED=$("$PY" -m wellbeing import 2>&1 | grep -oE "[0-9,]+ events \([0-9,]+ new\)" | head -1)
 [ -n "$IMPORTED" ] && echo "$(stamp) archive -> local db: $IMPORTED"
 
-if ! "$PY" -m wellbeing connect >/dev/null 2>&1; then
-  echo "$(stamp) phone not on this network; dashboard is current, skipping sync"; exit 0
-fi
-
-echo "$(stamp) syncing from $ME"
-"$PY" -m wellbeing deep-sync && "$PY" -m wellbeing export | tail -1
+# The phone collects and uploads to My Drive/PhoneUsageInbox on its own; this
+# only reads what arrived. Nothing new is a quiet no-op.
+echo "$(stamp) reading the phone's inbox on $ME"
+"$PY" -m wellbeing ingest-phone 2>&1 | sed "s/^/$(stamp)   /"
 echo "$(stamp) done"

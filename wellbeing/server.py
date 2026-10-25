@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
 
-from . import (adb, appdump, archive, db, export as export_mod, importer, stats,
+from . import (adb, archive, db, export as export_mod, importer, inbox as inbox_mod, stats,
                sync as sync_mod)
 
 RANGES = {"1": 1, "3": 3, "7": 7, "14": 14, "30": 30, "90": 90}
@@ -103,37 +103,40 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
 
     @app.post("/api/sync")
     def do_sync():
-        """Pull from the phone and write the shared archive.
+        """Read what the phone uploaded to Drive and write the shared archive.
 
-        The button used to stop at the database, which left the newest data on
-        this machine only -- invisible to the other computer and lost with the
-        database. It now reaches as far back as the companion app allows and
-        exports, exactly like sync.sh.
+        The phone collects and uploads on its own (android/DRIVE_SETUP.md), so
+        nothing here talks to it: this ingests PhoneUsageInbox, then exports,
+        exactly like `wellbeing ingest-phone`. The old adb pull is still there
+        as `wellbeing deep-sync`.
         """
         c = conn()
-        serial = (request.json or {}).get("serial") if request.is_json else None
         pulled = None
         try:
             sync_mod.backup_db(c)
             # Pull in whatever the other machine archived first, so pressing this
-            # converges the dashboard even when the phone cannot be reached --
-            # the same order autosync.sh uses.
+            # converges the dashboard even when the inbox has nothing new.
             pulled = importer.import_archive(c)
-            serial = adb.require_device(serial)
-            try:
-                result = appdump.ingest_files(c, appdump.capture(serial))
-            except (adb.AdbError, FileNotFoundError, OSError):
-                result = sync_mod.sync(c, serial)      # fall back to the 24h path
+            box = inbox_mod.inbox_dir()
+            if box is None or not box.is_dir():
+                raise FileNotFoundError(
+                    f"no phone inbox at {box or 'My Drive/' + inbox_mod.FOLDER_NAME} -- "
+                    "has the phone app connected to Drive yet?")
+            result = inbox_mod.ingest_inbox(c, box)
             cov = stats.coverage(c)
-            written = export_mod.export_all(c, cov["days"][0], cov["days"][-1])
-        except adb.AdbError as exc:
+            written = export_mod.export_all(c, cov["days"][0], cov["days"][-1]) if cov["days"] else {}
+        except FileNotFoundError as exc:
             # The import above still happened, so say what did land rather than
             # reporting a flat failure.
             return jsonify({"ok": False, "error": str(exc),
                             "imported": (pulled or {}).get("events_added", 0)}), 409
+        collected = result["device"].get("collected_at_ms")
         return jsonify({
             "ok": True,
-            "events_added": result.get("events_added", 0),
+            "events_added": result["events_added"],
+            "files": len(result["files"]),
+            "refused": result["refused"],
+            "phone_collected_at_ms": collected,
             "days": len(cov["days"]),
             "archive_rows_added": sum(added for _total, added in written.values()),
         })

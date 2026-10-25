@@ -135,7 +135,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
     </label>
     <span class="spacer"></span>
     <span class="sub" id="syncmsg"></span>
-    <button class="btn" id="sync">Sync phone</button>
+    <button class="btn" id="sync">Get phone data</button>
   </div>
 
   <div class="tiles" id="tiles"></div>
@@ -662,12 +662,16 @@ document.getElementById("system").addEventListener("change", e => {
 });
 document.getElementById("sync").addEventListener("click", async () => {
   const btn = document.getElementById("sync"), msg = document.getElementById("syncmsg");
-  btn.disabled = true; msg.className = "sub"; msg.textContent = "pulling from phone…";
+  btn.disabled = true; msg.className = "sub"; msg.textContent = "reading the phone's uploads…";
   try {
     const r = await fetch("/api/sync", { method: "POST" });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
-    msg.textContent = `+${j.events_added} events · ${j.days} days · archive +${j.archive_rows_added} rows`;
+    const when = j.phone_collected_at_ms
+      ? new Date(j.phone_collected_at_ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+      : "never";
+    msg.textContent = `+${j.events_added} events · phone last collected ${when} · archive +${j.archive_rows_added} rows` +
+      (j.refused.length ? ` · ${j.refused.length} file(s) skipped, see ingest-phone` : "");
     await load();
   } catch (err) {
     msg.className = "err"; msg.textContent = String(err.message || err);

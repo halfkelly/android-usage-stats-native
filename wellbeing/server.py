@@ -1,6 +1,8 @@
 """Local Flask dashboard. Binds to localhost only -- this is personal data."""
 from __future__ import annotations
 
+import os
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -141,5 +143,20 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             "days": len(cov["days"]),
             "archive_rows_added": sum(added for _total, added in written.values()),
         })
+
+    @app.post("/api/stop")
+    def stop():
+        """The page's Stop button: answer, then end the server process.
+
+        Only the page itself may ask. It sends X-Dashboard, a header a form on
+        another site cannot set, and a script on another site cannot add
+        without a CORS preflight this server never approves -- so no web page
+        open elsewhere can stop the dashboard.
+        """
+        if request.headers.get("X-Dashboard") != "1":
+            return jsonify({"ok": False, "error": "not from the dashboard"}), 403
+        # Exit just after this response has gone out.
+        threading.Timer(0.5, os._exit, args=(0,)).start()
+        return jsonify({"ok": True})
 
     return app

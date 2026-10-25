@@ -221,3 +221,15 @@ def test_a_stale_override_follows_only_the_move_into_phoneusage(tmp_path, monkey
     # Any other missing override is left alone, to fail loudly downstream.
     monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(drive / "SomethingElse"))
     assert archive.archive_dir() == drive / "SomethingElse"
+
+
+def test_only_the_dashboard_page_can_stop_the_server(tmp_path, monkeypatch):
+    import threading
+    from wellbeing.server import create_app
+    started = []
+    monkeypatch.setattr(threading, "Timer", lambda *a, **k: type("T", (), {"start": lambda self: started.append(a)})())
+    client = create_app(tmp_path / "u.db").test_client()
+    assert client.post("/api/stop").status_code == 403          # e.g. a form on another site
+    assert not started
+    assert client.post("/api/stop", headers={"X-Dashboard": "1"}).get_json() == {"ok": True}
+    assert len(started) == 1                                     # exit scheduled, not run here

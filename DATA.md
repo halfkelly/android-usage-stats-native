@@ -38,6 +38,8 @@ use most.
 | `foreground_service_ms` | Background service time — calls, music, navigation, with the screen off |
 | `notifications` | Interruptive notifications the app sent |
 | `notifications_seen` | Of those, how many you actually saw |
+| `pickups_started` | Pick-ups whose first app was this one (see `pickups.csv`) |
+| `micro_pickups`, `impulse_pickups` | Of those, how many were micro / impulse |
 | `interactions` | Touch interactions |
 
 ```
@@ -223,6 +225,47 @@ someone stopped using their phone.** `last_use` in `device_daily.csv` is clipped
 at midnight, so a session running past midnight reports `00:00` and a real 03:36
 bedtime looks like 23:08 the evening before.
 
+## Pick-up files
+
+Every time the screen came on, from `SCREEN_INTERACTIVE` to
+`SCREEN_NON_INTERACTIVE`. Rebuilt from `events/` like everything else
+(`wellbeing/pickups.py`).
+
+- **Pick-up**: the phone was unlocked. **Glance**: it wasn't (the time, a
+  notification on the lock screen).
+- **Micro**: a pick-up shorter than 30 s.
+- **Impulse**: a pick-up with no notification in the 2 minutes before the
+  unlock, counting only notifications since the phone was last locked.
+- A screen-on still open when the data ends isn't counted until it closes,
+  so today's figures trail `unlocks` slightly.
+
+### `pickups.csv`
+**What happened each time I picked the phone up?** One row per screen-on.
+
+| Column | Meaning |
+|---|---|
+| `day`, `time` | Local date and time the screen came on |
+| `start_at`, `unlock_at`, `end_at` | Screen on, unlock (blank for a glance), screen off |
+| `duration_ms` | Screen on to screen off |
+| `unlocked` | 1 = pick-up, 0 = glance |
+| `first_app`, `first_package` | First app opened after unlocking, skipping the home screen, keyboard and system UI |
+| `packages` | Every app touched, in order, `;`-separated |
+| `trigger_app`, `trigger_package`, `trigger_delay_ms` | The notification behind it, and how long before |
+| `micro`, `impulse` | 1 when the pick-up was micro / impulse |
+
+### `pickup_daily.csv`
+**How often do I pick the phone up, and why?** One row per day.
+
+| Column | Meaning |
+|---|---|
+| `pickups`, `glances` | Counts |
+| `micro`, `impulse`, `impulse_micro` | Pick-ups of each kind; the last is both |
+| `pickup_ms`, `glance_ms` | Total time in each |
+
+Only counts and sums: the archive merge never lets a number fall, which a
+median could legitimately do. Divide `pickup_ms` by `pickups` for the mean;
+take medians from `pickups.csv`.
+
 ## The backstop
 
 ### `events/events-YYYY-MM.csv`
@@ -315,6 +358,7 @@ older `dumpsys` path have it. Use `opens` in `app_daily.csv` instead.
 | Phone use by hour | `hourly.csv` |
 | Screen-on independent of apps | `device_counters.csv` |
 | Orientation, dark mode | `device_configs.csv` |
+| Pick-ups, impulse, micro | `pickup_daily.csv`, `pickups.csv` |
 | Body, sleep, steps | `garmin_daily.csv` |
 | Anything else | `events/` |
 

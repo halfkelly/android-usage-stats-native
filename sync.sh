@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pull the phone, update the shared archive, open the dashboard.
-# Works on macOS and on WSL/Linux. The .command files call this.
+# Legacy: pulls over adb. The phone app now uploads to Drive on its own;
+# `wellbeing ingest-phone` is the normal path.
 set -uo pipefail
 cd "$(dirname "$0")"
 

@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from . import (adb, appdump, archive as archive_mod, codecheck, db, export as export_mod,
+from . import (adb, appdump, archive as archive_mod, db, export as export_mod,
                importer as importer_mod, inbox as inbox_mod, stats, sync as sync_mod)
 
 
@@ -252,14 +252,6 @@ def cmd_where(args) -> int:
         print(f"timezone: {archive_mod.archive_timezone()}")
     except archive_mod.TimezoneError:
         print("timezone: NOT SET -- run: python -m wellbeing set-timezone <Area/City>")
-    state, differing, local = codecheck.compare()
-    if state == "same":
-        print(f"code:     {local} — matches the bundle in Drive")
-    elif state == "differs":
-        names = ", ".join(differing[:4]) + (" …" if len(differing) > 4 else "")
-        print(f"code:     {local} — DIFFERS from the bundle in Drive ({len(differing)} file(s): {names})")
-    else:
-        print(f"code:     {local} — no bundle found in Drive to compare with")
     inbox = inbox_mod.inbox_dir()
     if inbox is None or not inbox.is_dir():
         print(f"inbox:    {inbox or 'no Google Drive'} — nothing from the phone yet")

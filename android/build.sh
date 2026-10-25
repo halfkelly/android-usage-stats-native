@@ -2,22 +2,22 @@
 # Builds the companion APK without Gradle: aapt2 -> javac -> d8 -> zipalign -> apksigner.
 #
 # Toolchain, first match wins:
-#   JDK          $JAVA_HOME, ../tools/jdk-linux (WSL), ../tools/jdk/Contents/Home (Mac)
-#   build-tools  $ANDROID_HOME/build-tools/34.0.0, ../tools/sdk/build-tools/34.0.0, ../tools/android-14
+#   JDK          $JAVA_HOME, ../tools/jdk-linux
+#   build-tools  $ANDROID_HOME/build-tools/34.0.0, ../tools/sdk/build-tools/34.0.0
 #   android.jar  $ANDROID_HOME/platforms/android-34, ../tools/sdk/platforms/android-34
-# On a fresh machine, WINDOWS.md has the two downloads that fill ../tools.
+# On a fresh machine, README.md ("Building the phone app") fills ../tools.
 set -euo pipefail
 cd "$(dirname "$0")"
 TOOLS=../tools
 
 first_dir() { for d in "$@"; do [ -n "$d" ] && [ -d "$d" ] && { (cd "$d" && pwd); return; }; done; return 1; }
 
-JAVA_HOME="$(first_dir "${JAVA_HOME:-}" $TOOLS/jdk-linux $TOOLS/jdk/Contents/Home)" \
+JAVA_HOME="$(first_dir "${JAVA_HOME:-}" $TOOLS/jdk-linux)" \
   || { echo "no JDK: set JAVA_HOME or unpack one into $TOOLS/jdk-linux" >&2; exit 1; }
 export JAVA_HOME
 PATH="$JAVA_HOME/bin:$PATH"
 SDK="${ANDROID_HOME:-$TOOLS/sdk}"
-BT="$(first_dir "$SDK/build-tools/34.0.0" $TOOLS/sdk/build-tools/34.0.0 $TOOLS/android-14)" \
+BT="$(first_dir "$SDK/build-tools/34.0.0" $TOOLS/sdk/build-tools/34.0.0)" \
   || { echo "no build-tools 34: sdkmanager \"build-tools;34.0.0\"" >&2; exit 1; }
 PLATFORM="$(first_dir "$SDK/platforms/android-34" $TOOLS/sdk/platforms/android-34)" \
   || { echo "no platform 34: sdkmanager \"platforms;android-34\"" >&2; exit 1; }
@@ -28,7 +28,7 @@ rm -rf $OUT/classes $OUT/gen $OUT/*.apk.tmp && mkdir -p $OUT/classes $OUT/gen/co
 # The signing key, generated once. The APK only ever runs on your own phone.
 # A new key cannot update an APK signed by another one -- the phone would need
 # an uninstall and setup all over again -- so restore the backup first
-# (WINDOWS.md, "The signing key") rather than let this make a new one.
+# (README.md, "The signing key") rather than let this make a new one.
 if [ ! -f debug.keystore ]; then
   echo "note: no android/debug.keystore -- generating a NEW key; it cannot update the installed app" >&2
   keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \

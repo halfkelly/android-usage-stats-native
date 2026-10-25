@@ -22,7 +22,7 @@ LOCAL_FALLBACK = ROOT / "data" / "csv"
 # Everything this project keeps in Drive lives under one folder:
 #   My Drive/PhoneUsage/phone/    the phone app's uploads (inbox.py)
 #   My Drive/PhoneUsage/archive/  this archive
-#   My Drive/PhoneUsage/code/     the code bundle (codecheck.py)
+#   My Drive/PhoneUsage/code/     the app's signing key backup (code/signing)
 # The phone app creates PhoneUsage itself: its drive.file permission can only
 # write into folders it made. The old top-level names are still found, so a
 # machine keeps working until the folders are moved.
@@ -32,20 +32,13 @@ LEGACY_FOLDER_NAME = "PhoneUsageBackup"
 ENV_VAR = "PHONE_USAGE_ARCHIVE"
 
 
-def _candidates(home: Path | None = None, mnt: Path = Path("/mnt")) -> list[Path]:
-    """Possible 'My Drive' roots, macOS and WSL/Windows.
+def _candidates(mnt: Path = Path("/mnt")) -> list[Path]:
+    """Possible 'My Drive' roots as WSL sees Google Drive for desktop.
 
-    `home` and `mnt` are parameters only so the WSL layouts can be tested on a
-    machine that isn't running WSL.
+    Drive is usually a lettered mount (G: as /mnt/g) but can also be a folder
+    in the Windows user profile. `mnt` is a parameter only for tests.
     """
-    home = home or Path.home()
     out: list[Path] = []
-    # macOS: Google Drive for desktop mounts under CloudStorage
-    cloud = home / "Library" / "CloudStorage"
-    if cloud.exists():
-        out += sorted(cloud.glob("GoogleDrive-*/My Drive"))
-    # WSL: the Windows side is mounted under /mnt. Drive is usually a lettered
-    # mount (G:) but can also be a folder in the Windows user profile.
     if mnt.exists():
         for drive in sorted(mnt.glob("[a-z]")):
             out.append(drive / "My Drive")
@@ -54,8 +47,8 @@ def _candidates(home: Path | None = None, mnt: Path = Path("/mnt")) -> list[Path
     return out
 
 
-def drive_root(home: Path | None = None, mnt: Path = Path("/mnt")) -> Path | None:
-    for path in _candidates(home, mnt):
+def drive_root(mnt: Path = Path("/mnt")) -> Path | None:
+    for path in _candidates(mnt):
         if path.is_dir():
             return path
     return None

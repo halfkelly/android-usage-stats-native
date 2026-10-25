@@ -169,7 +169,11 @@ def cmd_ingest_phone(args) -> int:
         print("error: Google Drive not found, so no PhoneUsageInbox. Point at it with "
               f"${inbox_mod.ENV_VAR}=/path/to/PhoneUsageInbox", file=sys.stderr)
         return 1
+    if not inbox.is_dir():
+        print(f"error: No phone inbox at {inbox}", file=sys.stderr)
+        return 1
     conn = db.connect(args.db)
+    sync_mod.backup_db(conn)
     try:
         result = inbox_mod.ingest_inbox(conn, inbox, fetch_labels=args.fetch_labels,
                                         everything=args.all)

@@ -167,3 +167,17 @@ def test_only_the_newest_snapshot_is_read(tmp_path):
     r = inbox.ingest_inbox(conn, root)
     assert r["snapshots"]["buckets"] == 1
     assert [x[0] for x in conn.execute("SELECT package FROM interval_stats")] == ["com.new"]
+
+
+def test_the_command_backs_up_the_database_before_writing(tmp_path, monkeypatch):
+    from wellbeing import __main__ as cli
+    root = _inbox(tmp_path)
+    _write(root, "events-2026-10-20.csv", _day(D0))
+    dbfile = tmp_path / "u.db"
+    db.connect(dbfile).close()
+    monkeypatch.setattr(cli.archive_mod, "pin_timezone", lambda: "Asia/Kolkata")
+    assert cli.main(["--db", str(dbfile), "ingest-phone", str(root), "--no-export"]) == 0
+    backup = db.connect(tmp_path / "u.db.bak")
+    assert backup.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0  # taken before
+    assert _count(db.connect(dbfile)) == 180
+    assert cli.main(["--db", str(dbfile), "ingest-phone", str(tmp_path / "nope")]) == 1

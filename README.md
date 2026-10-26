@@ -136,7 +136,9 @@ be compared with the Python server's.
   https://dl.google.com/android/repository/platform-tools-latest-windows.zip
   into `tools/platform-tools-win/`, `chmod +x` its `.exe` files, copy the APK
   under `/mnt/c`, then
-  `tools/platform-tools-win/adb.exe install -r 'C:\path\to\usagedump.apk'`.
+  `tools/platform-tools-win/adb.exe install -r --user 0 'C:\path\to\usagedump.apk'`.
+  `--user 0` matters on Samsung: without it adb also installs into the Dual
+  apps profile, where a second copy runs its own job for nothing.
   The phone needs USB debugging on (Developer options). An update re-arms the
   6-hourly job by itself; the app doesn't need opening.
 

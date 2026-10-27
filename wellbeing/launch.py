@@ -19,7 +19,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
-from . import archive, db, inbox
+from . import archive, inbox
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -199,15 +199,6 @@ def autosync(db_path: str, ingest) -> int:
                 if problem:
                     print(f"error: {problem}")
                     return 1
-                conn = db.connect(db_path)
-                folder = archive.archive_dir()
-                if (folder / archive.META_FILE).exists() and (folder / "events").is_dir() \
-                        and not conn.execute("SELECT 1 FROM events LIMIT 1").fetchone():
-                    from . import importer
-                    print("empty database: importing the archive")
-                    r = importer.import_archive(conn)
-                    print(f"  {r['events']:,} events from {r['source']}")
-                conn.close()
                 print("reading the phone's uploads")
                 code = ingest(db_path)
                 print("done")

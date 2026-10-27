@@ -308,3 +308,20 @@ def test_an_archive_left_half_written_is_exported_on_the_next_sync(tmp_path, mon
     assert not (usage / "archive" / "events").exists()
     assert cli.main(["--db", str(dbfile), "ingest-phone"]) == 0                 # nothing new, still exports
     assert list((usage / "archive" / "events").glob("events-*.csv"))
+
+
+def test_a_new_database_starts_from_the_archive(tmp_path, monkeypatch):
+    """A second laptop, or setup in a fresh folder: the phone has only its last
+    ~10 days, so the first sync must bring in the archive's history as well."""
+    from wellbeing import __main__ as cli
+    archive, usage = _fresh_drive(tmp_path, monkeypatch)
+    phone = usage / "phone"
+    monkeypatch.setattr(archive, "pin_timezone", lambda: "Asia/Kolkata")
+    _write(phone, "events-2026-10-20.csv", _day(D0))
+    _write(phone, "events-2026-10-21.csv", _day(D0 + DAY))
+    assert cli.main(["--db", str(tmp_path / "first.db"), "ingest-phone"]) == 0
+    (phone / "events" / "events-2026-10-20.csv").unlink()        # the phone forgets a day
+    _write(phone, "events-2026-10-22.csv", _day(D0 + 2 * DAY))
+    second = tmp_path / "second.db"
+    assert cli.main(["--db", str(second), "ingest-phone"]) == 0
+    assert _count(db.connect(second)) == 3 * 180                # every day, each once

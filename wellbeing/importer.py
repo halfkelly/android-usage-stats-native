@@ -121,3 +121,20 @@ def import_archive(conn: sqlite3.Connection, csv_dir: Path | None = None) -> dic
     return {"source": str(csv_dir), "events": len(events), "events_added": added,
             "buckets": len(buckets), "counters": len(counters), "configs": len(configs),
             "labels": len(names), "days": len(days)}
+
+
+def start_from_archive(conn: sqlite3.Connection) -> dict | None:
+    """A new machine, or a deleted database: import the archive before anything
+    else. Otherwise the first sync fills the database with only the phone's last
+    ~10 days, and from then on it is no longer empty, so nothing ever brings in
+    the history. None when the database has events or there is no archive yet.
+    """
+    if conn.execute("SELECT 1 FROM events LIMIT 1").fetchone():
+        return None
+    folder = archive.archive_dir()
+    if not (folder / archive.META_FILE).exists() or not (folder / "events").is_dir():
+        return None
+    print(f"a new database: reading the archive first ({folder})", flush=True)
+    result = import_archive(conn, folder)
+    print(f"  {result['events']:,} events, {result['days']:,} days")
+    return result

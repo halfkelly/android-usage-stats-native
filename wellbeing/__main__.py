@@ -46,6 +46,7 @@ def cmd_ingest_phone(args) -> int:
         return 1
     conn = db.connect(args.db)
     sync_mod.backup_db(conn)
+    importer_mod.start_from_archive(conn)
     try:
         result = inbox_mod.ingest_inbox(conn, inbox, fetch_labels=args.fetch_labels,
                                         everything=args.all)

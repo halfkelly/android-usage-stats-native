@@ -131,9 +131,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
                 # pin it, since the server may have started before it existed.
                 if inbox_mod.bootstrap_archive():
                     archive.pin_timezone()
-                if not c.execute("SELECT 1 FROM events LIMIT 1").fetchone() \
-                        and (archive.archive_dir() / "events").is_dir():
-                    importer.import_archive(c)     # a new machine: start from the archive
+                importer.start_from_archive(c)
                 if inbox_mod.has_changes(c, box):
                     sync_mod.backup_db(c)          # only when there is something to write
                 result = inbox_mod.ingest_inbox(c, box)

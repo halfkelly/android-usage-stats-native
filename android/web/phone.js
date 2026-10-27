@@ -253,12 +253,16 @@
         for (const [name, lo, hi] of DAY_BLOCKS) {
           const inside = lo < hi ? (hour >= lo && hour < hi) : (hour >= lo || hour < hi);
           if (!inside) continue;
-          const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-          let edge = midnight + hi * 3600000;
-          if (hi <= hour) edge = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() + hi * 3600000;
+          // Wall-clock edges, as Python's naive datetimes give: midnight plus
+          // hi hours of absolute time is an hour off on a daylight-saving day,
+          // and the loop would then creep on a millisecond at a time.
+          const hh = Math.floor(hi), mm = Math.round((hi - hh) * 60);
+          let edge = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm).getTime();
+          if (hi <= hour) edge = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, hh, mm).getTime();
           const chunk = Math.min(b, edge);
-          totals[name] += Math.max(0, chunk - a);
-          a = Math.max(chunk, a + 1);
+          if (chunk <= a) break;                  // never creep, whatever the clock does
+          totals[name] += chunk - a;
+          a = chunk;
           moved = true;
           break;
         }

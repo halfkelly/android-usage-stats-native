@@ -499,14 +499,24 @@ def _paired_ms_per_day(conn, start_type: str, stop_type: str, start: str, end: s
             # This is how Amazon Music came to show a full day of playback on
             # days the app was never opened.
             chunks = []
+            whole_day = False
             t = a
             while t < b:
                 d = datetime.fromtimestamp(t / 1000).date()
-                edge = int(datetime(d.year, d.month, d.day).timestamp() * 1000) + 86_400_000
+                # The next calendar midnight, not midnight + 24 h: the day the
+                # clocks go back is 25 hours long, and +24 h lands at 23:00 the
+                # same day -- after which this loop never advanced again (a
+                # Europe/Berlin archive hung here on 2026-10-25).
+                day_start = int(datetime(d.year, d.month, d.day).timestamp() * 1000)
+                nd = d + timedelta(days=1)
+                edge = int(datetime(nd.year, nd.month, nd.day).timestamp() * 1000)
                 stop = min(b, edge)
+                if stop <= t:
+                    break                      # never stall, whatever the clock does
+                whole_day = whole_day or (t == day_start and stop == edge)
                 chunks.append(((str(d), key) if by_package else str(d), stop - t))
                 t = stop
-            if any(ms >= 86_400_000 for _, ms in chunks):
+            if whole_day:
                 continue
             for slot, ms in chunks:
                 out[slot] += ms

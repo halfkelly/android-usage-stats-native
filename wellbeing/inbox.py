@@ -125,6 +125,21 @@ def bootstrap_archive() -> str | None:
     return zone
 
 
+def archive_incomplete(conn) -> bool:
+    """The database has events but the archive has no event backup.
+
+    The export normally runs only after new uploads; an export cut short (a
+    first run stopped part-way) would otherwise stay half-written until the
+    phone's next upload. Both sync paths export when this is true.
+    """
+    if not conn.execute("SELECT 1 FROM events LIMIT 1").fetchone():
+        return False
+    try:
+        return not (archive.archive_dir() / "events").is_dir()
+    except OSError:
+        return False
+
+
 def has_changes(conn, inbox: Path) -> bool:
     """Is there anything ingest_inbox would read? Cheap: file sizes and mtimes."""
     files = [path for kind, _d, path in _day_files(inbox / "events") if kind == "events"]

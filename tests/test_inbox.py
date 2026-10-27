@@ -295,3 +295,16 @@ def test_an_existing_archive_keeps_its_timezone(tmp_path, monkeypatch):
     archive.set_archive_timezone("Asia/Kolkata")
     assert inbox.bootstrap_archive() is None
     assert archive.archive_timezone() == "Asia/Kolkata"
+
+
+def test_an_archive_left_half_written_is_exported_on_the_next_sync(tmp_path, monkeypatch):
+    """A first run stopped mid-export left only archive.json and daily.csv."""
+    from wellbeing import __main__ as cli
+    archive, usage = _fresh_drive(tmp_path, monkeypatch)
+    _write(usage / "phone", "events-2026-10-20.csv", _day(D0))
+    monkeypatch.setattr(archive, "pin_timezone", lambda: "Asia/Kolkata")
+    dbfile = tmp_path / "u.db"
+    assert cli.main(["--db", str(dbfile), "ingest-phone", "--no-export"]) == 0   # the cut-short run
+    assert not (usage / "archive" / "events").exists()
+    assert cli.main(["--db", str(dbfile), "ingest-phone"]) == 0                 # nothing new, still exports
+    assert list((usage / "archive" / "events").glob("events-*.csv"))

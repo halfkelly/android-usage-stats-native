@@ -72,7 +72,8 @@ def cmd_ingest_phone(args) -> int:
     print(f"  {len(result['files'])} day file(s), {result['events_seen']:,} events, "
           f"{result['events_added']:,} new; {snaps['buckets']:,} bucket rows, "
           f"{snaps['eventstats']} counters, {snaps['configs']} configs")
-    if args.no_export or not (result["files"] or any(snaps.values())):
+    if args.no_export or not (result["files"] or any(snaps.values())
+                              or inbox_mod.archive_incomplete(conn)):
         return 1 if result["refused"] else 0
     cov = stats.coverage(conn)
     if cov["days"]:

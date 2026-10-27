@@ -138,7 +138,8 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
                     sync_mod.backup_db(c)          # only when there is something to write
                 result = inbox_mod.ingest_inbox(c, box)
                 written = {}
-                if result["files"] or any(result["snapshots"].values()):
+                if result["files"] or any(result["snapshots"].values()) \
+                        or inbox_mod.archive_incomplete(c):
                     cov = stats.coverage(c)
                     written = export_mod.export_all(c, cov["days"][0], cov["days"][-1])
             except FileNotFoundError as exc:

@@ -57,6 +57,10 @@ $lines = $env_.Keys | Sort-Object | ForEach-Object { "$_=`"$($env_[$_])`"" }
 [IO.File]::WriteAllText((Join-Path $repo '.env'), (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding $false))
 Write-Host "  PHONE_USAGE_DRIVE=$driveForCompose"
 
+# data\ must exist before Docker mounts it, or Docker creates it owned by root
+# and the app inside the container can't write its database there.
+New-Item -ItemType Directory -Force -Path (Join-Path $repo 'data') | Out-Null
+
 Step 'Building (a few minutes the first time)'
 if ((Invoke-Compose @('build', 'dashboard')) -ne 0) { Fail 'The build failed; see above.' }
 

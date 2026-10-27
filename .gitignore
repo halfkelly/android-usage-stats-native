@@ -10,7 +10,8 @@ tools/
 
 # Data lives in the Google Drive archive, not in git:
 # it changes on every sync and would bloat the history.
-data/
+data/*
+!data/.gitkeep
 raw/
 
 # Android build artefacts, except the signed APK the Windows machine installs

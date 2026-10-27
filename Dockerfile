@@ -22,9 +22,7 @@ COPY autosync.sh ./
 RUN useradd --uid 1000 --create-home app && chown -R app /app
 USER app
 
-# Log timestamps in local time; days and hours follow archive.json regardless.
-ENV TZ=Asia/Kolkata \
-    PY=python \
+ENV PY=python \
     PYTHONUNBUFFERED=1 \
     PHONE_USAGE_ARCHIVE=/drive/PhoneUsage/archive \
     DASHBOARD_ALWAYS_ON=1

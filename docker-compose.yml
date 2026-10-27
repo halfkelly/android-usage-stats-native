@@ -13,15 +13,17 @@ x-app: &app
   image: android-usage-stats-native:latest
   build: .
   volumes:
-    - ./data:/app/data
-    # Google Drive for desktop, as WSL sees it. Override with PHONE_USAGE_DRIVE.
+    # Settings come from .env, written by windows\setup.ps1: the Drive folder
+    # (G:/My Drive/PhoneUsage on Windows; /mnt/g/... seen from WSL), and
+    # optionally another data folder or port.
+    - "${USAGE_DATA:-./data}:/app/data"
     - "${PHONE_USAGE_DRIVE:-/mnt/g/My Drive/PhoneUsage}:/drive/PhoneUsage"
 
 services:
   dashboard:
     <<: *app
     ports:
-      - "127.0.0.1:5000:5000"     # this PC only
+      - "127.0.0.1:${DASHBOARD_PORT:-5000}:5000"     # this PC only
     restart: unless-stopped
 
   sync:

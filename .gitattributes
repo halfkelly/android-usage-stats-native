@@ -1,0 +1,12 @@
+# Scripts run inside Linux containers and WSL: they must keep LF line endings
+# even when the repo is cloned or downloaded on Windows, or bash fails on \r.
+*.sh        text eol=lf
+wb          text eol=lf
+Dockerfile  text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+# Windows-only launchers.
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+*.apk       binary
+*.keystore  binary

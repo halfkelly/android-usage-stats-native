@@ -24,6 +24,9 @@ if [ -z "${INBOX:-}" ] || [ ! -d "$INBOX" ]; then
   exit 0
 fi
 ARCHIVE=$("$PY" -c "from wellbeing import archive; print(archive.archive_dir())" 2>/dev/null)
+# Log in the archive's timezone once there is one (UTC before the first run).
+TZ=$("$PY" -c "from wellbeing import archive; print(archive.archive_timezone())" 2>/dev/null || echo UTC)
+export TZ
 
 # A fresh machine starts from the archive, if there is one; a brand-new archive
 # is created in the phone's timezone by the first ingest (inbox.bootstrap_archive).

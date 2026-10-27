@@ -23,3 +23,6 @@ android/oauth.properties
 
 # check.html input, regenerated from a phone inbox
 android/web/data.js
+
+# Per-machine Docker settings, written by windows\setup.ps1
+.env

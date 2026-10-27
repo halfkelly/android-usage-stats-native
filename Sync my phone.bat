@@ -1,5 +1,5 @@
 @echo off
 REM Read the phone's latest uploads from Google Drive now.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows\sync.ps1"
-echo   Done: see data\autosync.log for details.
+if exist "%~dp0python\python.exe" ("%~dp0python\python.exe" -m wellbeing ingest-phone) else (powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows\sync.ps1" & echo   Details: data\autosync.log)
+echo.
 pause

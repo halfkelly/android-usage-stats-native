@@ -1,9 +1,11 @@
 # Shared by the other scripts in this folder (dot-sourced). Windows PowerShell 5.1.
 #
-# Docker runs one of two ways, and these helpers hide which:
-#   - Docker Desktop: `docker` on the Windows PATH, project anywhere on C:.
-#   - Docker Engine inside WSL: the project lives in WSL, seen from Windows as
-#     \\wsl.localhost\<distro>\home\..., and compose runs through wsl.exe.
+# Two ways the project runs, chosen by where it lives:
+#   - Native (the usual): an ordinary Windows folder. setup.ps1 puts Python in
+#     <project>\python (the embeddable package: no installer, no admin, nothing
+#     system-wide), and everything runs as `python -m wellbeing ...`.
+#   - WSL + Docker (the maintainer's PC): the project lives in WSL, seen from
+#     Windows as \\wsl.localhost\<distro>\home\..., and runs in Docker there.
 
 $ErrorActionPreference = 'Stop'
 
@@ -27,43 +29,27 @@ function ConvertTo-WslPath([string]$WinPath) {
     return $WinPath -replace '\\', '/'
 }
 
-function Test-DockerDesktop {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
-    & docker info *> $null
-    return $LASTEXITCODE -eq 0
+function Get-PythonDir { Join-Path (Get-RepoRoot) 'python' }
+function Get-Python { Join-Path (Get-PythonDir) 'python.exe' }
+function Get-Pythonw { Join-Path (Get-PythonDir) 'pythonw.exe' }
+
+# Run `python -m wellbeing <args>` with the project's own Python; returns the exit code.
+function Invoke-Wellbeing([string[]]$WellbeingArgs) {
+    $py = Get-Python
+    if (-not (Test-Path -LiteralPath $py)) { throw "No Python in $(Get-PythonDir): run 'Set up (Windows).bat' first." }
+    & $py -m wellbeing @WellbeingArgs | Out-Host
+    return $LASTEXITCODE
 }
 
-# Docker Desktop normally starts at sign-in; if it isn't running yet, start it
-# and wait for the engine (up to ~2 minutes).
-function Start-DockerDesktop {
-    if (Test-DockerDesktop) { return $true }
-    $exe = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
-    if (-not (Test-Path $exe)) { return $false }
-    Start-Process $exe | Out-Null
-    for ($i = 0; $i -lt 60; $i++) {
-        Start-Sleep -Seconds 2
-        if (Test-DockerDesktop) { return $true }
-    }
-    return $false
-}
-
-# Run `docker compose <args>` for this project; returns the exit code.
+# Run `docker compose <args>` in WSL for a project that lives there; returns the exit code.
 function Invoke-Compose([string[]]$ComposeArgs) {
-    $repo = Get-RepoRoot
-    $wsl = Get-WslTarget $repo
-    if ($wsl) {
-        $joined = ($ComposeArgs | ForEach-Object { "'" + ($_ -replace "'", "'\''") + "'" }) -join ' '
-        # Out-Host: a native command's output would otherwise become part of
-        # this function's return value instead of just the exit code.
-        & wsl.exe -d $wsl.Distro -- bash -lc "cd '$($wsl.Path)' && docker compose $joined" | Out-Host
-        return $LASTEXITCODE
-    }
-    if (-not (Start-DockerDesktop)) {
-        throw 'Docker Desktop is not running and could not be started. Install it from https://www.docker.com/products/docker-desktop/ and start it once.'
-    }
-    Push-Location $repo
-    try { & docker compose @ComposeArgs | Out-Host; return $LASTEXITCODE }
-    finally { Pop-Location }
+    $wsl = Get-WslTarget (Get-RepoRoot)
+    if (-not $wsl) { throw 'Docker is only used for a project inside WSL.' }
+    $joined = ($ComposeArgs | ForEach-Object { "'" + ($_ -replace "'", "'\''") + "'" }) -join ' '
+    # Out-Host: a native command's output would otherwise become part of this
+    # function's return value instead of just the exit code.
+    & wsl.exe -d $wsl.Distro -- bash -lc "cd '$($wsl.Path)' && docker compose $joined" | Out-Host
+    return $LASTEXITCODE
 }
 
 # "My Drive" as Google Drive for desktop shows it: a drive letter (G:\My Drive,
@@ -93,6 +79,12 @@ function Read-DotEnv {
         }
     }
     return $vals
+}
+
+function Write-DotEnv([hashtable]$Values) {
+    $lines = $Values.Keys | Sort-Object | ForEach-Object { "$_=`"$($Values[$_])`"" }
+    [IO.File]::WriteAllText((Join-Path (Get-RepoRoot) '.env'), (($lines -join "`n") + "`n"),
+                            (New-Object Text.UTF8Encoding $false))
 }
 
 function Get-DashboardUrl {

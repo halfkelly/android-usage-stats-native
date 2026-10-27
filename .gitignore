@@ -27,3 +27,6 @@ android/web/data.js
 
 # Per-machine Docker settings, written by windows\setup.ps1
 .env
+
+# The app's own Python on a Windows laptop, put there by windows\setup.ps1
+/python/

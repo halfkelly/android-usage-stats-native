@@ -35,9 +35,10 @@ def url() -> str:
 
 
 def tell(text: str, title: str = "Phone Usage") -> None:
-    """Print, or -- under pythonw, where there is no console -- a message box."""
-    has_console = sys.stdout is not None and getattr(sys.stdout, "isatty", lambda: False)()
-    if has_console or os.name != "nt":
+    """Print, or -- under pythonw, which has nowhere to print -- a message box."""
+    # pythonw (the shortcut, the scheduled task) has no stdout at all; anything
+    # else -- a console, a pipe, a log -- gets the text.
+    if sys.stdout is not None or os.name != "nt":
         print(text)
         return
     try:
@@ -105,7 +106,6 @@ def open_dashboard(db_path: str, browser: bool = True) -> int:
             return 1
     if browser:
         webbrowser.open(url())
-    print(f"Dashboard at {url()}")
     return 0
 
 

@@ -66,6 +66,15 @@ if ((Invoke-Compose @('build', 'dashboard')) -ne 0) { Fail 'The build failed; se
 
 Step 'First sync'
 if ((Invoke-Compose @('up', '-d', 'dashboard')) -ne 0) { Fail "The dashboard didn't start; see above." }
+# Windows sees the phone's uploads (checked above); make sure the container
+# does too. Google Drive's G: is a virtual drive, and Docker Desktop can come up
+# without it -- e.g. when Drive started after Docker -- leaving the folder empty.
+if ((Invoke-Compose @('run', '--rm', 'sync', 'test', '-f', '/drive/PhoneUsage/phone/device.json')) -ne 0) {
+    Fail ("Docker can't see the Google Drive folder ($usage), although Windows can.`n" +
+          "  Usually Docker started before Google Drive. Quit Docker Desktop (tray icon > Quit),`n" +
+          "  make sure Google Drive is running, start Docker Desktop again, then run this again.`n" +
+          "  If it still fails: Docker Desktop > Settings > Resources > File sharing, add $DrivePath.")
+}
 if ((Invoke-Compose @('run', '--rm', 'sync', 'python', '-m', 'wellbeing', 'ingest-phone')) -ne 0) {
     Fail 'The first sync failed; see above.'
 }

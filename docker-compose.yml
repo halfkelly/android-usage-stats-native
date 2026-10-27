@@ -4,7 +4,6 @@
 #   docker compose run --rm sync       read the phone's uploads (what the
 #                                      scheduled task does)
 #   docker compose run --rm apk        build the phone app (android/build.sh)
-#   docker compose run --rm -e NO_OAUTH=1 apk   ...without the client secret (the copy in git)
 #
 # Data stays outside the containers: ./data holds the database, its backups and
 # the Garmin login; the Drive folder holds the phone's uploads and the archive.
@@ -38,8 +37,6 @@ services:
       dockerfile: Dockerfile
     user: "1000:1000"
     working_dir: /src/android
-    environment:
-      NO_OAUTH: "${NO_OAUTH:-0}"
     volumes:
       - ./android:/src/android                              # writes android/build/
       - ./wellbeing/templates:/src/wellbeing/templates:ro   # the dashboard page it bundles

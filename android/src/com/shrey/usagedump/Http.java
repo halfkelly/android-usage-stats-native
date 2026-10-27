@@ -10,7 +10,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Map;
 
-/** Just enough HTTP for OAuth and the Drive REST API, on HttpURLConnection. */
+/** Just enough HTTP for the Drive REST API, on HttpURLConnection. */
 final class Http {
     private Http() {}
 
@@ -69,16 +69,6 @@ final class Http {
         } finally {
             c.disconnect();
         }
-    }
-
-    static Response postForm(String url, String... kv) throws IOException {
-        StringBuilder b = new StringBuilder();
-        for (int i = 0; i < kv.length; i += 2) {
-            if (b.length() > 0) b.append('&');
-            b.append(enc(kv[i])).append('=').append(enc(kv[i + 1]));
-        }
-        return request("POST", url, null, "application/x-www-form-urlencoded",
-                b.toString().getBytes("UTF-8"));
     }
 
     static String enc(String s) {

@@ -36,8 +36,7 @@ public class DumpActivity extends Activity {
     private static final int REQ_ACCOUNT = 2;
 
     private TextView status, codeView;
-    private Button access, battery, drive, runNow, openGoogle, codeSignIn;
-    private String verificationUrl;
+    private Button access, battery, drive, runNow;
     private volatile boolean busy;
 
     @Override
@@ -84,18 +83,11 @@ public class DumpActivity extends Activity {
         codeView.setVisibility(View.GONE);
         col.addView(codeView);
 
-        openGoogle = button(col, "Open Google sign-in", v -> {
-            if (verificationUrl != null) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(verificationUrl)));
-        });
-        openGoogle.setVisibility(View.GONE);
-        button(col, "Open dashboard", v -> startActivity(new Intent(this, DashboardActivity.class)));
         runNow = button(col, "Run now", v -> runNow());
         access = button(col, "Grant usage access",
                 v -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
         battery = button(col, "Let it run in the background", v -> askBattery());
         drive = button(col, "Connect Google Drive", v -> onDrive());
-        codeSignIn = button(col, "Sign in with a code instead", v -> connect());
-        codeSignIn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(col);
@@ -149,10 +141,8 @@ public class DumpActivity extends Activity {
         access.setVisibility(hasAccess ? View.GONE : View.VISIBLE);
         battery.setVisibility(unrestricted ? View.GONE : View.VISIBLE);
         drive.setText(connected ? "Disconnect Google Drive" : "Connect Google Drive");
-        codeSignIn.setVisibility(!connected && DriveAuth.codeSignInAvailable() ? View.VISIBLE : View.GONE);
         runNow.setEnabled(!busy);
         drive.setEnabled(!busy);
-        codeSignIn.setEnabled(!busy);
     }
 
     private static String when(SharedPreferences p, String key) {
@@ -199,8 +189,7 @@ public class DumpActivity extends Activity {
             try {
                 DriveAuth.connectAccount(this, name);
             } catch (Exception e) {
-                toastStatus("Not connected: " + e.getMessage()
-                        + (DriveAuth.codeSignInAvailable() ? "\nYou can try \"Sign in with a code instead\"." : ""));
+                toastStatus("Not connected: " + e.getMessage() + ".\nTap Connect Google Drive to try again.");
                 return;
             }
             Notifier.announce(this, "Google Drive connected ✓", "Uploading to " + DriveUploader.SHOWN_PATH + ".");
@@ -211,55 +200,6 @@ public class DumpActivity extends Activity {
             });
             CollectorJob.uploadNow(this);
         });
-    }
-
-    /**
-     * The fallback device flow, made hard to get lost in: the code and three numbered
-     * steps are on screen before anything opens, the code is already copied,
-     * and approval is announced by a notification -- visible from the browser,
-     * so there is no need to switch back to find out whether it worked.
-     */
-    private void connect() {
-        background("Getting a code…", () -> {
-            DriveAuth.DeviceCode dc;
-            try {
-                dc = DriveAuth.start();
-            } catch (Exception e) {
-                toastStatus("Couldn't reach Google: " + e.getMessage() + "\nCheck the internet connection and tap Connect again.");
-                return;
-            }
-            final DriveAuth.DeviceCode code = dc;
-            runOnUiThread(() -> showCode(code));
-            try {
-                DriveAuth.await(this, code);
-            } catch (Exception e) {
-                toastStatus("Not connected: " + e.getMessage() + ".\nTap Connect Google Drive to try again.");
-                return;
-            }
-            Notifier.announce(this, "Google Drive connected ✓",
-                    "Uploading now. You can go back to what you were doing.");
-            runOnUiThread(() -> {
-                codeView.setText("✓ Connected to Google Drive.\nUploading your data now.");
-                codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-                openGoogle.setVisibility(View.GONE);
-            });
-            CollectorJob.uploadNow(this);
-        });
-    }
-
-    private void showCode(DriveAuth.DeviceCode dc) {
-        ClipboardManager cb = getSystemService(ClipboardManager.class);
-        cb.setPrimaryClip(ClipData.newPlainText("Google code", dc.userCode));
-        verificationUrl = dc.verificationUrl;
-        codeView.setText("Your code (already copied):\n\n" + dc.userCode + "\n\n"
-                + "1.  Tap Open Google sign-in below and paste the code.\n"
-                + "2.  Choose your Google account.\n"
-                + "3.  If Google says it hasn't verified the app, tap Continue, then Continue again to allow access.\n\n"
-                + "You'll get a notification when it's done. This code works for "
-                + Math.max(1, (dc.expiresAtMs - System.currentTimeMillis()) / 60000) + " minutes.");
-        codeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        codeView.setVisibility(View.VISIBLE);
-        openGoogle.setVisibility(View.VISIBLE);
     }
 
     private void toastStatus(String msg) {

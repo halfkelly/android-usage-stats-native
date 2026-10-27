@@ -30,3 +30,6 @@ android/web/data.js
 
 # The app's own Python on a Windows laptop, put there by windows\setup.ps1
 /python/
+
+# Release files, made by release.sh
+/dist/

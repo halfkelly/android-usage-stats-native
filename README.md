@@ -6,7 +6,11 @@ impulse). Shown as a dashboard in the phone app itself, and optionally on a
 Windows laptop. No root. The phone collects every 6 hours and uploads to *your
 own* Google Drive; the laptop never needs to connect to the phone.
 
-**New here? See [Set it up](#set-it-up).** The phone app alone is enough.
+**Download:**
+[UsageDump.apk](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageDump.apk) (the phone app) ·
+[UsageStats-Windows.zip](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageStats-Windows.zip)
+(the Windows dashboard, optional) · [all releases](https://github.com/Shrey97/android-usage-stats-native/releases).
+Then **[set it up](#set-it-up)**. The phone app alone is enough.
 
 ## How it works
 
@@ -39,32 +43,33 @@ Nothing is needed. To see the numbers:
 - **On the phone:** Usage Dump → **Open dashboard**. The same page, worked out
   on the phone from its own data (history from when the app was installed).
 - **On the PC:** **Phone Usage Dashboard** on the Desktop (made by setup)
-  starts the dashboard container if it isn't running and opens
-  http://127.0.0.1:5000. The page shows what's already here at once, then
-  checks Drive for the phone's latest uploads in the background. **How to read
-  this** explains every figure and assumption.
+  starts the dashboard if it isn't running and opens http://127.0.0.1:5000.
+  The page shows what's already here at once, then checks Drive for the
+  phone's latest uploads in the background. **How to read this** explains
+  every figure and assumption.
 - To pull in the latest right now: tap **Run now** in the app, give Drive a
-  minute, then **Get phone data** on the dashboard, or **Sync my phone.bat**.
-- `./wb where` (WSL) or `docker compose run --rm sync python -m wellbeing where`
-  (PowerShell) shows when the phone last uploaded.
+  minute, then **Get phone data** on the dashboard, or **Sync my phone.bat** in
+  the project folder, which also says when the phone last uploaded.
 
-The dashboard container keeps running until **Stop dashboard.bat** or a
-reboot; closing the tab is fine. The Windows task **PhoneUsageAutosync** runs
-at 03:00, 09:00, 15:00 and 21:00: it starts the dashboard container if needed
-and runs the `sync` container once, which reads the phone's uploads into the
-database and the archive.
+The dashboard runs in the background, without a window, until **Stop
+dashboard.bat** or a restart; closing the tab is fine. The Windows task
+**PhoneUsageAutosync** runs at 03:00, 09:00, 15:00 and 21:00, or as soon as the
+PC is on again after missing one: it reads the phone's uploads into the
+database and the archive, and logs to `data\autosync.log`.
 
 If the phone stops uploading, the phone shows a notification (usage access
-off, Drive sign-in expired, nothing uploaded for a day). The dashboard, `where`
-and `ingest-phone` also warn once it has been quiet for a day.
+off, Drive sign-in expired, nothing uploaded for a day). The dashboard and
+**Sync my phone.bat** also warn once it has been quiet for a day.
 
 ## Set it up
 
 ### 1. The phone (everyone)
 
-1. **Get the APK:** `android/build/usagedump.apk` in this repository (on GitHub:
-   open the file, then **Download raw file**). Open it on the phone.
-   - Allow **Install unknown apps** for the app you opened it from.
+1. **Get the app:** on the phone, tap
+   [UsageDump.apk](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageDump.apk) and open the
+   downloaded file.
+   - Allow **Install unknown apps** for the app you opened it from (the
+     browser, or My Files).
    - Samsung: if it's blocked, turn off **Auto Blocker** (Settings → Security
      and privacy) for the install, then back on.
    - Play Protect may warn that it doesn't know the app: **More details →
@@ -88,41 +93,79 @@ because nobody has paid for Google's verification; that's expected.
 ### 2. A Windows laptop (optional)
 
 A bigger dashboard, plus a permanent CSV archive in your Drive. Do the phone
-first: the laptop reads what the phone uploads.
+first: the laptop reads what the phone uploads. Nothing else to install: setup
+puts its own Python inside the project folder (no admin rights, nothing
+system-wide).
 
-1. Install **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**
-   and start it once.
-2. Install **[Google Drive for desktop](https://www.google.com/drive/download/)**
+1. Install **[Google Drive for desktop](https://www.google.com/drive/download/)**
    and sign in with **the same Google account as the phone**. Wait until
    `My Drive\PhoneUsage\phone` shows up in it (a minute or two after the phone's
    first upload), then right-click `PhoneUsage` → **Available offline**.
-3. Get this project: on GitHub **Code → Download ZIP**, and unzip it somewhere
-   permanent, e.g. `Documents\android-usage-stats-native`. (Or `git clone`.)
-4. Double-click **Set up (Windows).bat** in that folder. It checks Docker and
-   Drive, builds the app (a few minutes the first time), reads the phone's
-   uploads, creates your archive (in your phone's timezone), registers a sync
-   at 03:00, 09:00, 15:00 and 21:00, puts **Phone Usage Dashboard** on your
-   Desktop and opens it. Safe to run again any time to repair or update.
+2. Download **[UsageStats-Windows.zip](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageStats-Windows.zip)**,
+   right-click it → **Extract All…**, put your user folder in the box
+   (`C:\Users\<you>`) → **Extract**. That makes
+   `C:\Users\<you>\Phone Usage Dashboard`. Not Documents or the Desktop:
+   Windows often keeps those in OneDrive, and the app's database must not sync
+   to the cloud (setup refuses such a folder).
+3. In that folder, double-click **Set up (Windows).bat**. If Windows says it
+   protected your PC: **More info → Run anyway**. In a few minutes setup puts
+   Python and the app's libraries in the folder (about 65 MB), reads the
+   phone's uploads, creates your archive (in the phone's time zone), registers
+   a sync at 03:00, 09:00, 15:00 and 21:00, puts **Phone Usage Dashboard** on
+   your Desktop and opens it. Running it again is safe and repairs anything
+   missing.
+
+The PC's time zone has to be the phone's, because days are cut at the
+archive's midnight; setup says so if they differ.
 
 Afterwards: **Phone Usage Dashboard** on the Desktop opens it; **Stop
 dashboard.bat** stops it; **Sync my phone.bat** reads the latest uploads now.
-To remove everything except your data: `windows\uninstall.ps1`
-(right-click → Run with PowerShell).
+To remove it: right-click `windows\uninstall.ps1` → **Run with PowerShell**.
+That removes the task, the shortcut and the app's Python, and keeps `data\`
+and everything in Drive; then delete the folder.
 
-Updating: download the new ZIP over the old folder (keep `data\`), and run
-**Set up (Windows).bat** again.
+**Updating.** The phone: install the new APK over the old one, the same way;
+every setting stays. The laptop: extract the new ZIP to the same place
+(**Replace the files in the destination**), then run **Set up (Windows).bat**
+again. Your history is in Drive and in `data\`, which the ZIP doesn't touch. A
+fresh folder works too: its setup reads the history back from the Drive
+archive.
+
+**Good to know:**
+- Tested on Samsung (Android 16). Other brands can be stricter with apps in
+  the background; if uploads stop, the app says so.
+- History starts when the app is installed, plus the ~10 days the phone still
+  remembers.
+- The laptop part is Windows only.
+- Nothing updates itself: a new version is a new download from the links
+  above.
 
 ### The maintainer's PC (Docker in WSL)
 
-The same scripts work when the project lives inside WSL with Docker Engine
-there instead of Docker Desktop (`/etc/wsl.conf`: `[boot] systemd=true`, your
-user in the `docker` group): run **Set up (Windows).bat** from the project's
-`\\wsl.localhost\...` folder and the scripts run compose through `wsl.exe`.
-`./wb <command>` runs any command in the container.
+When the project lives inside WSL, **Set up (Windows).bat** run from its
+`\\wsl.localhost\...` folder uses Docker there instead of a Python of its own:
+Docker Engine in WSL (`/etc/wsl.conf`: `[boot] systemd=true`, your user in the
+`docker` group). The dashboard is then a container that restarts by itself (so
+the page has no Stop button), and the scheduled task runs the `sync`
+container. `./wb <command>` runs any command in the container.
 
 What's where: the images hold only code. `data\` (database, backups, logs) and
 the Drive folder are mounted in, so rebuilding or deleting a container loses
 nothing. A brand-new laptop either imports an existing archive or starts one.
+
+### Making a release (the maintainer)
+
+1. If the app changed: raise `versionCode` and `versionName` in
+   `android/AndroidManifest.xml`, `docker compose run --rm apk`, try it on the
+   phone, commit the APK. Commit and push everything else too.
+2. `./release.sh` makes `dist/UsageDump.apk` and `dist/UsageStats-Windows.zip`
+   from the last commit. DATA.md stays out: its examples are the maintainer's
+   own days.
+3. On GitHub: **Releases → Draft a new release** → **Choose a tag**, type
+   `v` and the app's version (`v2.10`) → **Create new tag** → a title → drag
+   both files into the box → **Publish release**. Keep the two file names: the
+   download links at the top of this page fetch the newest release's files by
+   name.
 
 ### Google Cloud (the maintainer, once)
 
@@ -212,7 +255,8 @@ assumptions worth knowing.
 
 ## All commands
 
-`./wb <command>` (runs it in the app's container)
+`./wb <command>` in WSL (runs it in the app's container), or on a laptop set up
+without Docker, `python\python.exe -m wellbeing <command>` in the project folder.
 
 | Command | Does |
 |---|---|
@@ -222,6 +266,9 @@ assumptions worth knowing.
 | `report` | terminal summary (`--days`, `--top`) |
 | `serve` | run the dashboard (`--host`, `--port`) |
 | `where` | which archive, inbox, timezone and database this machine uses |
+| `open` | start the dashboard if needed and open it in the browser (`--no-browser`) |
+| `stop` | stop the dashboard |
+| `autosync` | the scheduled sync: `ingest-phone`, logged to `data/autosync.log` |
 | `set-timezone ZONE` | record the archive's timezone, once |
 | `rebuild` | recompute derived tables from stored events |
 | `garmin-login`, `garmin` | Garmin Connect daily health data |
@@ -242,8 +289,12 @@ wellbeing/
   appdump.py   the app's CSV formats; clock-shift detection
   db.py        SQLite schema    stats.py: read-side queries
   server.py    Flask app        templates/dashboard.html
+  pickups.py   pick-ups: glances, micro and impulse
+  launch.py    open, stop and the scheduled sync without Docker
 android/       the phone app: Collector (CSV), CollectorJob (6-hourly),
                DriveAuth + DriveUploader, Notifier, DRIVE_SETUP.md
+windows/       setup, uninstall, and the scripts behind the .bat files
+release.sh     the files a GitHub release carries (dist/)
 data/usage.db  this machine's database (rebuildable from the archive)
 ```
 
@@ -269,4 +320,5 @@ They check the invariants the archive must hold (a number never decreases, a
 blank never erases, a day once archived survives a database that forgot it, a
 gap is never counted as usage), clock-shift handling, and the phone inbox (days
 in any order, rewrites, duplicates, refusals). Each exists because the thing it
-checks has gone wrong before.
+checks has gone wrong before. Every test gets a Drive folder of its own
+(`tests/conftest.py`), so the real one is never touched.

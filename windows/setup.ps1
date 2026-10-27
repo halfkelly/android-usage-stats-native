@@ -51,6 +51,21 @@ if (-not (Test-Path -LiteralPath (Join-Path $UsagePath 'phone\device.json'))) {
 Write-Host "  Phone uploads found in $UsagePath\phone"
 Write-Host '  Tip: in Google Drive, right-click PhoneUsage > Available offline.'
 
+if (-not $wsl) {
+    # The database is written all day: in a folder that syncs to the cloud it
+    # would be uploaded mid-write, with locks and conflict copies to follow.
+    # Windows often keeps Documents and the Desktop in OneDrive.
+    $synced = @($env:OneDrive, $env:OneDriveConsumer, $env:OneDriveCommercial, (Split-Path $UsagePath -Parent)) |
+        Where-Object { $_ -and $repo.StartsWith($_.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }
+    if ($synced) {
+        Fail ("This folder is inside $(@($synced)[0]), which syncs to the cloud.`n" +
+              "  Move the whole folder to $env:USERPROFILE (your user folder) and run Set up (Windows).bat from there.")
+    }
+    # A ZIP from the internet marks every file in it, and Windows would then
+    # ask before running each .bat. Running setup is the one time it's needed.
+    Get-ChildItem -LiteralPath $repo, (Join-Path $repo 'windows') -File | Unblock-File -ErrorAction SilentlyContinue
+}
+
 Step 'Settings (.env)'
 $settings_ = Read-DotEnv
 $settings_['PHONE_USAGE_DRIVE'] = if ($wsl) { ConvertTo-WslPath $UsagePath } else { $UsagePath }

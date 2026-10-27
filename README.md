@@ -1,8 +1,12 @@
 # android-usage-stats-native
 
-Digital Wellbeing style usage statistics from a Samsung phone, shown as a
-dashboard on the phone itself and on Windows (WSL, in Docker). No root. The phone collects and uploads on
-its own; the computer never needs to connect to it.
+Digital Wellbeing style usage statistics from an Android phone: screen time per
+app and per hour, unlocks, notifications, and pick-ups (glances, micro and
+impulse). Shown as a dashboard in the phone app itself, and optionally on a
+Windows laptop. No root. The phone collects every 6 hours and uploads to *your
+own* Google Drive; the laptop never needs to connect to the phone.
+
+**New here? See [Set it up](#set-it-up).** The phone app alone is enough.
 
 ## How it works
 
@@ -23,7 +27,7 @@ writes every day out within 6 hours, whether or not the computer is on.
 |---|---|---|
 | `phone/` | raw day files, snapshots, `device.json` | the phone app |
 | `archive/` | the permanent CSV history, see [DATA.md](DATA.md) | `ingest-phone` / `export` |
-| `code/signing/` | the app's signing key and OAuth client (backup) | you, once |
+| `code/signing/` | the app's signing key (backup; only on the maintainer's Drive) | once |
 
 The app creates `PhoneUsage` itself: its `drive.file` permission can only
 write into folders it made.
@@ -34,14 +38,15 @@ Nothing is needed. To see the numbers:
 
 - **On the phone:** Usage Dump → **Open dashboard**. The same page, worked out
   on the phone from its own data (history from when the app was installed).
-- **On the PC:** **Phone Usage Dashboard** on the Desktop (a copy of
-  `Open dashboard.bat`) starts the dashboard container if it isn't running and
-  opens http://127.0.0.1:5000. The page shows what's already here at once, then
+- **On the PC:** **Phone Usage Dashboard** on the Desktop (made by setup)
+  starts the dashboard container if it isn't running and opens
+  http://127.0.0.1:5000. The page shows what's already here at once, then
   checks Drive for the phone's latest uploads in the background. **How to read
   this** explains every figure and assumption.
 - To pull in the latest right now: tap **Run now** in the app, give Drive a
   minute, then **Get phone data** on the dashboard, or **Sync my phone.bat**.
-- `./wb where` shows when the phone last uploaded.
+- `./wb where` (WSL) or `docker compose run --rm sync python -m wellbeing where`
+  (PowerShell) shows when the phone last uploaded.
 
 The dashboard container keeps running until **Stop dashboard.bat** or a
 reboot; closing the tab is fine. The Windows task **PhoneUsageAutosync** runs
@@ -53,62 +58,84 @@ If the phone stops uploading, the phone shows a notification (usage access
 off, Drive sign-in expired, nothing uploaded for a day). The dashboard, `where`
 and `ingest-phone` also warn once it has been quiet for a day.
 
-## Setup
+## Set it up
 
-### The PC (WSL Ubuntu, Docker)
+### 1. The phone (everyone)
 
-1. **Google Drive for desktop** on Windows, signed in to the same account.
-   Right-click `PhoneUsage` → **Available offline**, so reads don't wait on
-   downloads. WSL sees it as `/mnt/g/My Drive/PhoneUsage`, which
-   `docker-compose.yml` mounts; if Drive is elsewhere, set `PHONE_USAGE_DRIVE`.
-2. **Docker Engine in WSL**, with systemd on (`/etc/wsl.conf`: `[boot]
-   systemd=true`) and your user in the `docker` group.
-3. The code, in the Linux home (not under `/mnt/c`):
-   ```bash
-   git clone git@github.com:Shrey97/android-usage-stats-native.git ~/android-usage-stats-native
-   cd ~/android-usage-stats-native
-   docker compose build
-   docker compose up -d dashboard
-   ./wb where
-   ```
-   `where` should show the archive and `timezone: Asia/Kolkata`. Every day and
-   hour is cut in the archive's zone, recorded in `archive.json`. An empty
-   `data/` is filled from the archive on the first sync.
-4. The scheduled task (Task Scheduler → PhoneUsageAutosync), action
-   `wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd ~/android-usage-stats-native &&
-   docker compose up -d dashboard && docker compose run --rm sync'`.
+1. **Get the APK:** `android/build/usagedump.apk` in this repository (on GitHub:
+   open the file, then **Download raw file**). Open it on the phone.
+   - Allow **Install unknown apps** for the app you opened it from.
+   - Samsung: if it's blocked, turn off **Auto Blocker** (Settings → Security
+     and privacy) for the install, then back on.
+   - Play Protect may warn that it doesn't know the app: **More details →
+     Install anyway**. It's not from the Play Store, that's all.
+2. Open **Usage Dump** and tap what it shows, top to bottom:
+   **Grant usage access** (find Usage Dump, switch it on, come back),
+   **Let it run in the background** (Allow), allow notifications, then
+   **Connect Google Drive**: pick your Google account, then **Allow**. If Google
+   says it hasn't verified the app, tap **Continue**.
+3. Tap **Run now**. After a few seconds the status screen shows the days
+   collected and an upload; **Open dashboard** shows your numbers.
 
-What's where: the images hold only code. `data/` (database, its backups, the
-Garmin login, logs) and the Drive folder are mounted in, so rebuilding or
-deleting a container loses nothing.
+From then on it collects every 6 hours and uploads to `My Drive/PhoneUsage/` in
+*your* Drive. The app can only see the files it creates there: not the rest of
+your Drive, and nobody else's data, the maintainer's included.
 
-### The phone
+**Sign-in note:** until the maintainer publishes the Google app, only Gmail
+addresses added as test users can connect: send yours to the maintainer first
+(Cloud Console → Audience → Test users). Test users are asked to sign in again
+every 7 days; the app notifies, and nothing is lost meanwhile.
 
-1. Install the APK (see "Building the phone app"). Copy it to Drive and open it
-   on the phone, or install it over the cable.
-2. Open **Usage Dump** and tap the buttons it shows: **Grant usage access**,
-   **Let it run in the background**, allow notifications, then
-   **Connect Google Drive**. That opens the phone's own account picker: choose
-   the account, then **Allow**. A "Google Drive connected ✓" notification
-   confirms it.
-3. **Run now** once. The status screen shows about 10 days of files and an
-   upload.
+### 2. A Windows laptop (optional)
 
-The **Sign in with a code instead** button is a fallback (Google's device-code
-sign-in). It needs the OAuth client in `android/oauth.properties`.
+A bigger dashboard, plus a permanent CSV archive in your Drive. Do the phone
+first: the laptop reads what the phone uploads.
 
-### Google Cloud (once)
+1. Install **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**
+   and start it once.
+2. Install **[Google Drive for desktop](https://www.google.com/drive/download/)**
+   and sign in with **the same Google account as the phone**. Wait until
+   `My Drive\PhoneUsage\phone` shows up in it (a minute or two after the phone's
+   first upload), then right-click `PhoneUsage` → **Available offline**.
+3. Get this project: on GitHub **Code → Download ZIP**, and unzip it somewhere
+   permanent, e.g. `Documents\android-usage-stats-native`. (Or `git clone`.)
+4. Double-click **Set up (Windows).bat** in that folder. It checks Docker and
+   Drive, builds the app (a few minutes the first time), reads the phone's
+   uploads, creates your archive (in your phone's timezone), registers a sync
+   at 03:00, 09:00, 15:00 and 21:00, puts **Phone Usage Dashboard** on your
+   Desktop and opens it. Safe to run again any time to repair or update.
 
-The app's Drive access comes from a Cloud project; see
-[android/DRIVE_SETUP.md](android/DRIVE_SETUP.md). Until the consent screen is
-**published** (Branding page complete, then Audience → Publish app), Google ends
-the sign-in after 7 days. Once published, it lasts.
+Afterwards: **Phone Usage Dashboard** on the Desktop opens it; **Stop
+dashboard.bat** stops it; **Sync my phone.bat** reads the latest uploads now.
+To remove everything except your data: `windows\uninstall.ps1`
+(right-click → Run with PowerShell).
+
+Updating: download the new ZIP over the old folder (keep `data\`), and run
+**Set up (Windows).bat** again.
+
+### The maintainer's PC (Docker in WSL)
+
+The same scripts work when the project lives inside WSL with Docker Engine
+there instead of Docker Desktop (`/etc/wsl.conf`: `[boot] systemd=true`, your
+user in the `docker` group): run **Set up (Windows).bat** from the project's
+`\\wsl.localhost\...` folder and the scripts run compose through `wsl.exe`.
+`./wb <command>` runs any command in the container.
+
+What's where: the images hold only code. `data\` (database, backups, logs) and
+the Drive folder are mounted in, so rebuilding or deleting a container loses
+nothing. A brand-new laptop either imports an existing archive or starts one.
+
+### Google Cloud (the maintainer, once)
+
+The app signs in through a Google Cloud project that knows the app's package
+name and signing key: [android/DRIVE_SETUP.md](android/DRIVE_SETUP.md). Free,
+no billing. **Publish** it there so anyone can connect without being added
+as a test user.
 
 ## Building the phone app
 
 ```bash
 docker compose run --rm apk                  # android/build/usagedump.apk
-docker compose run --rm -e NO_OAUTH=1 apk    # the same, without the client secret
 ```
 
 The `apk` image has JDK 17 and Android build-tools 34; `android/build.sh`
@@ -118,8 +145,8 @@ the phone. `android/web/check.html` runs phone.js on the PC so its figures can
 be compared with the Python server's.
 
 - **The signing key.** `android/debug.keystore` signs the app and is not in
-  git. Its backup is in `My Drive/PhoneUsage/code/signing/`, with
-  `oauth.properties`. On a new machine, copy both into `android/` **before**
+  git. Its backup is in `My Drive/PhoneUsage/code/signing/`. On a new
+  machine, copy it into `android/` **before**
   the first build. Otherwise `build.sh` makes a new key, and an APK signed with
   a different key can't update the installed app (that means an uninstall,
   then setting everything up again). The Google "Android" OAuth client is tied
@@ -130,8 +157,8 @@ be compared with the Python server's.
   `adb shell run-as` can read, which helps testing but exposes the Drive
   token, so put the release build back afterwards. Both use the same key, so
   `install -r` switches between them and keeps every setting.
-- **The APK in git is built with `NO_OAUTH=1`**, so it never carries the client
-  secret. The normal sign-in doesn't need it, only the code fallback does.
+- **The APK carries no secret.** Sign-in is the phone's own Google account,
+  which Google ties to the package name and the signing key's fingerprint.
 - **Installing over the cable** needs no sudo with a *Windows* adb: unzip
   https://dl.google.com/android/repository/platform-tools-latest-windows.zip
   into `tools/platform-tools-win/`, `chmod +x` its `.exe` files, copy the APK

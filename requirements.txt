@@ -6,3 +6,5 @@ requests>=2.31
 # uses, and that still answers us. See wellbeing/garmin.py.
 garth==0.6.3
 pytest>=8.0
+# Windows has no IANA timezone database of its own; zoneinfo needs this there.
+tzdata

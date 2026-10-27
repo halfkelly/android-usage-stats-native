@@ -9,7 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import (archive as archive_mod, db, export as export_mod,
-               importer as importer_mod, inbox as inbox_mod, stats, sync as sync_mod)
+               importer as importer_mod, inbox as inbox_mod, launch, stats, sync as sync_mod)
 
 
 def _fmt(ms: int) -> str:
@@ -201,10 +201,28 @@ def cmd_garmin(args) -> int:
 
 def cmd_serve(args) -> int:
     from .server import create_app
+    args.port = args.port or launch.port()
     app = create_app(args.db)
     print(f"Dashboard on http://{args.host}:{args.port}  (Ctrl-C to stop)")
     app.run(host=args.host, port=args.port, debug=args.debug)
     return 0
+
+
+def cmd_open(args) -> int:
+    """The Desktop shortcut: start the dashboard if it isn't running, open it."""
+    return launch.open_dashboard(args.db, browser=not args.no_browser)
+
+
+def cmd_stop(args) -> int:
+    return launch.stop_dashboard()
+
+
+def cmd_autosync(args) -> int:
+    """The scheduled sync (also what autosync.sh runs in Docker)."""
+    def ingest(db_path: str) -> int:
+        return cmd_ingest_phone(argparse.Namespace(
+            db=db_path, source=None, fetch_labels=False, all=False, no_export=False))
+    return launch.autosync(args.db, ingest)
 
 
 def cmd_rebuild(args) -> int:
@@ -271,17 +289,29 @@ def main(argv=None) -> int:
 
     sp = sub.add_parser("serve", help="run the dashboard")
     sp.add_argument("--host", default="127.0.0.1")
-    sp.add_argument("--port", type=int, default=5000)
+    sp.add_argument("--port", type=int, default=None, help="default: DASHBOARD_PORT, else 5000")
     sp.add_argument("--debug", action="store_true")
     sp.set_defaults(func=cmd_serve)
+
+    sp = sub.add_parser("open", help="start the dashboard if needed and open it in the browser")
+    sp.add_argument("--no-browser", action="store_true")
+    sp.set_defaults(func=cmd_open)
+
+    sp = sub.add_parser("stop", help="stop a running dashboard")
+    sp.set_defaults(func=cmd_stop)
+
+    sp = sub.add_parser("autosync", help="the scheduled sync: read the phone's uploads, log to data/autosync.log")
+    sp.set_defaults(func=cmd_autosync)
 
     sp = sub.add_parser("rebuild", help="recompute sessions and hourly slices from stored events")
     sp.set_defaults(func=cmd_rebuild)
 
+    archive_mod.load_settings()
     args = p.parse_args(argv)
     # Everything that turns instants into days or hours must agree on a zone,
-    # so pin it before the command runs. These two never do date arithmetic.
-    if args.cmd not in ("where", "set-timezone"):
+    # so pin it before the command runs. These never do date arithmetic, or
+    # (open, autosync) handle a missing or mismatched zone themselves.
+    if args.cmd not in ("where", "set-timezone", "open", "stop", "autosync"):
         try:
             zone = inbox_mod.bootstrap_archive()
             if zone:
@@ -289,7 +319,8 @@ def main(argv=None) -> int:
                       f"timezone {zone}", file=sys.stderr)
             archive_mod.pin_timezone()
         except archive_mod.TimezoneError as exc:
-            if args.cmd != "serve":
+            # A mismatched zone would cut every day at the wrong midnight: never serve that.
+            if args.cmd != "serve" or isinstance(exc, archive_mod.ZoneMismatchError):
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
             # A fresh install whose phone hasn't uploaded yet: serve the empty

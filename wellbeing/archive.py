@@ -15,6 +15,7 @@ import re
 import shutil
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -34,12 +35,19 @@ ENV_VAR = "PHONE_USAGE_ARCHIVE"
 
 
 def _candidates(mnt: Path = Path("/mnt")) -> list[Path]:
-    """Possible 'My Drive' roots as WSL sees Google Drive for desktop.
+    """Possible 'My Drive' roots of Google Drive for desktop.
 
-    Drive is usually a lettered mount (G: as /mnt/g) but can also be a folder
-    in the Windows user profile. `mnt` is a parameter only for tests.
+    On Windows: a drive letter (G:\\My Drive, the default) or a folder in the
+    user profile (mirror mode). Under WSL the same places appear under /mnt.
+    `mnt` is a parameter only for tests.
     """
     out: list[Path] = []
+    if os.name == "nt":
+        for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+            out.append(Path(f"{letter}:\\") / "My Drive")
+        profile = Path(os.environ.get("USERPROFILE", str(Path.home())))
+        out += [profile / "My Drive", profile / "Google Drive" / "My Drive"]
+        return out
     if mnt.exists():
         for drive in sorted(mnt.glob("[a-z]")):
             out.append(drive / "My Drive")
@@ -124,6 +132,10 @@ TZ_ENV = "PHONE_USAGE_TZ"
 
 class TimezoneError(RuntimeError):
     pass
+
+
+class ZoneMismatchError(TimezoneError):
+    """Windows' clock is in another zone than the archive's (see pin_timezone)."""
 
 
 def _valid_zone(name: str) -> bool:
@@ -260,13 +272,62 @@ def pin_timezone() -> str:
     Setting TZ and calling tzset() moves Python's datetime conversions and
     SQLite's 'localtime' modifier together, including on connections already
     open, so every date calculation in the codebase follows it without edits.
+
+    Windows has no tzset: the process keeps the Windows clock's zone. There it
+    is only checked -- every day and hour would otherwise be cut in the
+    laptop's zone instead of the archive's, silently.
     """
     name = archive_timezone()
     if not _valid_zone(name):
         raise TimezoneError(f"Archive timezone {name!r} is not a known zone on this machine")
+    if not hasattr(time, "tzset"):
+        if not local_zone_matches(name):
+            raise ZoneMismatchError(
+                f"This computer's time zone isn't the archive's ({name}), so days would be "
+                f"cut at the wrong midnight.\n"
+                f"  Set it in Windows: Settings > Time & language > Date & time > Time zone, "
+                f"to the zone of {name}.")
+        return name
     os.environ["TZ"] = name
     time.tzset()
     return name
+
+
+def local_zone_matches(name: str, now: float | None = None) -> bool:
+    """Does this process's local time follow `name`, offsets and DST alike?
+
+    Compared at the 15th of every month for two years either side of now:
+    that tells a different zone apart, and a zone with other DST rules.
+    """
+    zone = ZoneInfo(name)
+    now = time.time() if now is None else now
+    for k in range(-24, 25):
+        t = now + k * 30.44 * 86400
+        local = datetime.fromtimestamp(t).astimezone().utcoffset()
+        if local != datetime.fromtimestamp(t, zone).utcoffset():
+            return False
+    return True
+
+
+def load_settings(root: Path | None = None) -> None:
+    """Settings from the project's .env (written by windows\\setup.ps1).
+
+    Only keys not already in the environment, so a real environment variable
+    -- or the container's own -- always wins. PHONE_USAGE_DRIVE names the
+    PhoneUsage folder; the archive and the phone's inbox are inside it.
+    """
+    env = (root or ROOT) / ".env"
+    try:
+        lines = env.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        m = re.match(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*"?(.*?)"?\s*$', line)
+        if m and m.group(1) not in os.environ:
+            os.environ[m.group(1)] = m.group(2)
+    drive = os.environ.get("PHONE_USAGE_DRIVE")
+    if drive and not os.environ.get(ENV_VAR) and os.name == "nt":
+        os.environ[ENV_VAR] = str(Path(drive) / FOLDER_NAME)
 
 
 def describe() -> str:

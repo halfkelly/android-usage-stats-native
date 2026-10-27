@@ -98,6 +98,33 @@ def _mark(conn, inbox: Path, path: Path) -> None:
         (str(path.relative_to(inbox)), st.st_mtime_ns, st.st_size, int(time.time() * 1000)))
 
 
+def bootstrap_archive() -> str | None:
+    """First run on a new machine: create the archive, in the phone's timezone.
+
+    Only when there is truly no archive yet -- its folder missing or empty -- and
+    the phone has uploaded a device.json naming its zone. An archive folder
+    with files but no archive.json is a half-synced or broken one, and an
+    unreadable one is a stale mount; both are left alone, for archive_timezone
+    to report, rather than "repaired" into a second archive. Returns the zone
+    recorded, or None when nothing was done.
+    """
+    folder = archive.archive_dir()
+    meta = folder / archive.META_FILE
+    try:
+        if meta.exists() or (folder.is_dir() and any(folder.iterdir())):
+            return None
+    except OSError:
+        return None
+    box = inbox_dir()
+    if box is None or not box.is_dir():
+        return None
+    zone = read_device(box).get("timezone")
+    if not zone:
+        return None
+    archive.set_archive_timezone(zone)      # validates the zone, creates the folder
+    return zone
+
+
 def has_changes(conn, inbox: Path) -> bool:
     """Is there anything ingest_inbox would read? Cheap: file sizes and mtimes."""
     files = [path for kind, _d, path in _day_files(inbox / "events") if kind == "events"]

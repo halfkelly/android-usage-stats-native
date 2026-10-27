@@ -282,10 +282,19 @@ def main(argv=None) -> int:
     # so pin it before the command runs. These two never do date arithmetic.
     if args.cmd not in ("where", "set-timezone"):
         try:
+            zone = inbox_mod.bootstrap_archive()
+            if zone:
+                print(f"note: new archive at {archive_mod.archive_dir()}, in the phone's "
+                      f"timezone {zone}", file=sys.stderr)
             archive_mod.pin_timezone()
         except archive_mod.TimezoneError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
+            if args.cmd != "serve":
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            # A fresh install whose phone hasn't uploaded yet: serve the empty
+            # dashboard; its first sync sets the archive up (server.do_sync).
+            print(f"note: {exc}\n  serving anyway; it sets itself up on the phone's first upload",
+                  file=sys.stderr)
     return args.func(args)
 
 

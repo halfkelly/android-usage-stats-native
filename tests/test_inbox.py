@@ -253,3 +253,45 @@ def test_in_docker_the_page_cannot_stop_the_dashboard(tmp_path, monkeypatch):
     monkeypatch.setenv("DASHBOARD_ALWAYS_ON", "1")
     client = create_app(tmp_path / "u.db").test_client()
     assert client.post("/api/stop", headers={"X-Dashboard": "1"}).status_code == 409
+
+
+def _fresh_drive(tmp_path, monkeypatch, device=True):
+    """A friend's Drive after the phone's first upload: PhoneUsage/phone, no archive."""
+    from wellbeing import archive
+    usage = tmp_path / "My Drive" / "PhoneUsage"
+    phone = usage / "phone"
+    (phone / "events").mkdir(parents=True)
+    if device:
+        (phone / "device.json").write_text(json.dumps({"timezone": "Europe/Berlin"}))
+    monkeypatch.delenv("PHONE_USAGE_INBOX", raising=False)
+    monkeypatch.delenv("PHONE_USAGE_TZ", raising=False)
+    monkeypatch.setenv("PHONE_USAGE_ARCHIVE", str(usage / "archive"))
+    return archive, usage
+
+
+def test_a_new_archive_takes_the_phones_timezone(tmp_path, monkeypatch):
+    archive, usage = _fresh_drive(tmp_path, monkeypatch)
+    assert inbox.bootstrap_archive() == "Europe/Berlin"
+    assert archive.archive_timezone() == "Europe/Berlin"
+    assert inbox.bootstrap_archive() is None            # once only
+
+
+def test_no_archive_is_made_before_the_phone_has_uploaded(tmp_path, monkeypatch):
+    archive, usage = _fresh_drive(tmp_path, monkeypatch, device=False)
+    assert inbox.bootstrap_archive() is None
+    assert not (usage / "archive").exists()
+
+
+def test_an_archive_folder_with_files_but_no_settings_is_left_alone(tmp_path, monkeypatch):
+    """Half-synced or broken, not new: 'repairing' it would start a second archive."""
+    archive, usage = _fresh_drive(tmp_path, monkeypatch)
+    (usage / "archive" / "events").mkdir(parents=True)
+    assert inbox.bootstrap_archive() is None
+    assert not (usage / "archive" / "archive.json").exists()
+
+
+def test_an_existing_archive_keeps_its_timezone(tmp_path, monkeypatch):
+    archive, usage = _fresh_drive(tmp_path, monkeypatch)
+    archive.set_archive_timezone("Asia/Kolkata")
+    assert inbox.bootstrap_archive() is None
+    assert archive.archive_timezone() == "Asia/Kolkata"

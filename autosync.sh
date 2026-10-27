@@ -18,19 +18,17 @@ stamp() { date "+%Y-%m-%d %H:%M:%S"; }
 exec 9>data/.autosync.lock
 flock -n 9 || { echo "$(stamp) a sync is already running; skipping"; exit 0; }
 
-ARCHIVE=$("$PY" -c "from wellbeing import archive; print(archive.archive_dir())" 2>/dev/null)
-if [ -z "${ARCHIVE:-}" ] || [ ! -d "$ARCHIVE" ]; then
-  echo "$(stamp) archive not reachable (is Google Drive mounted?); skipping"; exit 0
-fi
-# Refuse to run unattended against anything but the real archive: without
-# archive.json this would quietly start a fresh, empty one.
-if [ ! -f "$ARCHIVE/archive.json" ]; then
-  echo "$(stamp) no archive.json in $ARCHIVE; refusing to start a fresh archive unattended"
+INBOX=$("$PY" -c "from wellbeing import inbox; print(inbox.inbox_dir() or '')" 2>/dev/null)
+if [ -z "${INBOX:-}" ] || [ ! -d "$INBOX" ]; then
+  echo "$(stamp) no phone uploads at ${INBOX:-My Drive/PhoneUsage/phone} yet (is Google Drive running, and the phone app connected?); skipping"
   exit 0
 fi
+ARCHIVE=$("$PY" -c "from wellbeing import archive; print(archive.archive_dir())" 2>/dev/null)
 
-# A fresh database (new machine, or data/ wiped) starts from the archive.
-if ! "$PY" -c "from wellbeing import db; import sys; sys.exit(0 if db.connect().execute('SELECT 1 FROM events LIMIT 1').fetchone() else 1)"; then
+# A fresh machine starts from the archive, if there is one; a brand-new archive
+# is created in the phone's timezone by the first ingest (inbox.bootstrap_archive).
+if [ -f "$ARCHIVE/archive.json" ] && [ -d "$ARCHIVE/events" ] && \
+   ! "$PY" -c "from wellbeing import db; import sys; sys.exit(0 if db.connect().execute('SELECT 1 FROM events LIMIT 1').fetchone() else 1)"; then
   echo "$(stamp) empty database: importing the archive"
   "$PY" -m wellbeing import 2>&1 | sed "s/^/$(stamp)   /"
 fi

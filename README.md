@@ -81,10 +81,9 @@ From then on it collects every 6 hours and uploads to `My Drive/PhoneUsage/` in
 *your* Drive. The app can only see the files it creates there: not the rest of
 your Drive, and nobody else's data, the maintainer's included.
 
-**Sign-in note:** until the maintainer publishes the Google app, only Gmail
-addresses added as test users can connect: send yours to the maintainer first
-(Cloud Console → Audience → Test users). Test users are asked to sign in again
-every 7 days; the app notifies, and nothing is lost meanwhile.
+Anyone can connect: the Google app is published (home page and privacy policy:
+<https://shrey97.github.io/>). Google shows "hasn't verified this app" once,
+because nobody has paid for Google's verification; that's expected.
 
 ### 2. A Windows laptop (optional)
 
@@ -129,8 +128,9 @@ nothing. A brand-new laptop either imports an existing archive or starts one.
 
 The app signs in through a Google Cloud project that knows the app's package
 name and signing key: [android/DRIVE_SETUP.md](android/DRIVE_SETUP.md). Free,
-no billing. **Publish** it there so anyone can connect without being added
-as a test user.
+no billing. It is published; its home page and privacy policy are on
+<https://shrey97.github.io/> (repo Shrey97/shrey97.github.io), which Google
+requires before publishing.
 
 ## Building the phone app
 

@@ -26,9 +26,12 @@ non-sensitive scope, so publishing needs no Google review.
    support and contact email, audience **External**.
 2. **Data access → Add or remove scopes** → tick `.../auth/drive.file` →
    Update → **Save**.
-3. **Branding**: fill every required field (app name, user support email,
-   developer contact email) → **Save**. Leave the logo, home page and privacy
-   links empty: a logo can trigger a review.
+3. **Branding**: app name, user support email, developer contact email, and --
+   although not marked required -- an **Application home page** and
+   **Application privacy policy link**, with their domain under **Authorized
+   domains**: Publish stays greyed out without them. Ours are on GitHub Pages
+   (public repo `<user>.github.io`, domain `<user>.github.io`). Leave the logo
+   empty: a logo triggers a review. → **Save**.
 4. **Audience → Publish app → Confirm**. The status becomes **In production**.
 
 Until it is published, only the addresses under **Audience → Test users** can

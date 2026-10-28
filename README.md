@@ -83,6 +83,10 @@ once the phone has been quiet for a day.
    **Let it run in the background** (Allow), then
    **Connect Google Drive**: pick your Google account, then **Allow**. If Google
    says it hasn't verified the app, tap **Continue**.
+   - If switching on usage access says **App was denied access** or
+     **Restricted setting**: Android does that for apps installed from a file.
+     Open **Settings → Apps → Usage Dump**, tap **⋮** (top right) → **Allow
+     restricted settings**, confirm, then switch usage access on again.
 3. Tap **Run now**. After a few seconds the status screen shows the days
    collected and an upload; **Open dashboard** shows your numbers.
 

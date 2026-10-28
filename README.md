@@ -7,9 +7,9 @@ Windows laptop. No root. The phone collects every 6 hours and uploads to *your
 own* Google Drive; the laptop never needs to connect to the phone.
 
 **Download:**
-[UsageDump.apk](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageDump.apk) (the phone app) ·
-[UsageStats-Windows.zip](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageStats-Windows.zip)
-(the Windows dashboard, optional) · [all releases](https://github.com/Shrey97/android-usage-stats-native/releases).
+[UsageDump.apk](https://github.com/halfkelly/android-usage-stats-native/releases/latest/download/UsageDump.apk) (the phone app) ·
+[UsageStats-Windows.zip](https://github.com/halfkelly/android-usage-stats-native/releases/latest/download/UsageStats-Windows.zip)
+(the Windows dashboard, optional) · [all releases](https://github.com/halfkelly/android-usage-stats-native/releases).
 Then **[set it up](#set-it-up)**. The phone app alone is enough.
 
 ## How it works
@@ -69,7 +69,7 @@ once the phone has been quiet for a day.
 ### 1. The phone (everyone)
 
 1. **Get the app:** on the phone, tap
-   [UsageDump.apk](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageDump.apk) and open the
+   [UsageDump.apk](https://github.com/halfkelly/android-usage-stats-native/releases/latest/download/UsageDump.apk) and open the
    downloaded file.
    - Allow **Install unknown apps** for the app you opened it from (the
      browser, or My Files).
@@ -91,7 +91,7 @@ From then on it collects every 6 hours and uploads to `My Drive/PhoneUsage/` in
 your Drive, and nobody else's data, the maintainer's included.
 
 Anyone can connect: the Google app is published (home page and privacy policy:
-<https://shrey97.github.io/>). Google shows "hasn't verified this app" once,
+<https://halfkelly.github.io/>). Google shows "hasn't verified this app" once,
 because nobody has paid for Google's verification; that's expected.
 
 ### 2. A Windows laptop (optional)
@@ -105,7 +105,7 @@ system-wide).
    and sign in with **the same Google account as the phone**. Wait until
    `My Drive\PhoneUsage\phone` shows up in it (a minute or two after the phone's
    first upload), then right-click `PhoneUsage` → **Available offline**.
-2. Download **[UsageStats-Windows.zip](https://github.com/Shrey97/android-usage-stats-native/releases/latest/download/UsageStats-Windows.zip)**,
+2. Download **[UsageStats-Windows.zip](https://github.com/halfkelly/android-usage-stats-native/releases/latest/download/UsageStats-Windows.zip)**,
    right-click it → **Extract All…**, put your user folder in the box
    (`C:\Users\<you>`) → **Extract**. That makes
    `C:\Users\<you>\Phone Usage Dashboard`. Not Documents or the Desktop:
@@ -178,7 +178,7 @@ nothing. A brand-new laptop either imports an existing archive or starts one.
 The app signs in through a Google Cloud project that knows the app's package
 name and signing key: [android/DRIVE_SETUP.md](android/DRIVE_SETUP.md). Free,
 no billing. It is published; its home page and privacy policy are on
-<https://shrey97.github.io/> (repo Shrey97/shrey97.github.io), which Google
+<https://halfkelly.github.io/> (repo halfkelly/halfkelly.github.io), which Google
 requires before publishing.
 
 ## Building the phone app

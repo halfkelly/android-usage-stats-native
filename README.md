@@ -80,18 +80,24 @@ once the phone has been quiet for a day.
 2. Open **Usage Dump** and allow notifications when it asks. Then tap the
    setup buttons below **Run now**, top to bottom:
    **Grant usage access** (find Usage Dump, switch it on, come back),
-   **Let it run in the background** (Allow), then
+   **Let it run in the background** (Allow), then, if you want a backup,
    **Connect Google Drive**: pick your Google account, then **Allow**. If Google
    says it hasn't verified the app, tap **Continue**.
    - If switching on usage access says **App was denied access** or
      **Restricted setting**: Android does that for apps installed from a file.
      Open **Settings → Apps → Usage Dump**, tap **⋮** (top right) → **Allow
      restricted settings**, confirm, then switch usage access on again.
+   - **Google Drive is optional.** Without it everything stays on the phone,
+     and the app and its dashboard work just the same. But there's no backup
+     (uninstalling the app or changing phones loses the history) and no PC
+     dashboard. Connecting later uploads everything collected until then.
 3. Tap **Run now**. After a few seconds the status screen shows the days
-   collected and an upload; **Open dashboard** shows your numbers.
+   collected (and, with Drive, an upload); **Open dashboard** shows your
+   numbers. The first run reads back what the phone still remembers, usually
+   about 10 days: pick dates in the boxes at the top to see them all.
 
-From then on it collects every 6 hours and uploads to `My Drive/PhoneUsage/` in
-*your* Drive. The app can only see the files it creates there: not the rest of
+From then on it collects every 6 hours and, with Drive connected, uploads to
+`My Drive/PhoneUsage/` in *your* Drive. The app can only see the files it creates there: not the rest of
 your Drive, and nobody else's data, the maintainer's included.
 
 Anyone can connect: the Google app is published (home page and privacy policy:

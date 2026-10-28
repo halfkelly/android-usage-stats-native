@@ -10,6 +10,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Html;
+import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.TypedValue;
 import android.view.View;
@@ -22,8 +24,10 @@ import java.io.File;
 
 /**
  * The status screen: what was collected and uploaded, and the one-time setup
- * (usage access, battery, Drive). The real work runs in CollectorJob; nothing
- * here needs to be opened for collection to happen.
+ * (usage access, battery, Drive). Until the first collection it is a "Getting
+ * started" guide instead, for someone who has only just installed the app. The
+ * real work runs in CollectorJob; nothing here needs to be opened for
+ * collection to happen.
  */
 public class DumpActivity extends Activity {
 
@@ -32,7 +36,7 @@ public class DumpActivity extends Activity {
     private static final int REQ_ACCOUNT = 2;
 
     private TextView status, message;
-    private Button access, battery, drive, stopDrive, runNow;
+    private Button dashboard, access, appInfo, battery, drive, stopDrive, runNow;
     private boolean showsDisconnect;   // what the Drive button says, so a tap does what it read
     private volatile boolean busy;
 
@@ -82,10 +86,15 @@ public class DumpActivity extends Activity {
         message.setVisibility(View.GONE);
         col.addView(message);
 
-        button(col, "Open dashboard", v -> startActivity(new Intent(this, DashboardActivity.class)));
+        dashboard = button(col, "Open dashboard", v -> startActivity(new Intent(this, DashboardActivity.class)));
         runNow = button(col, "Run now", v -> runNow());
-        access = button(col, "Grant usage access",
-                v -> startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
+        access = button(col, "Grant usage access", v -> {
+            State.get(this).edit().putBoolean(State.ASKED_USAGE_ACCESS, true).apply();
+            startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
+        });
+        // Where "Allow restricted settings" lives, for when Android refuses usage access.
+        appInfo = button(col, "Open App info", v -> startActivity(new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getPackageName(), null))));
         battery = button(col, "Let it run in the background", v -> askBattery());
         drive = button(col, "Connect Google Drive", v -> onDrive());
         stopDrive = button(col, "Disconnect Google Drive", v -> disconnectDrive());   // while expired
@@ -112,10 +121,19 @@ public class DumpActivity extends Activity {
         File root = new Collector(this).root();
         String[] days = new File(root, "events").list((d, n) -> n.endsWith(".csv"));
         boolean hasAccess = Collector.hasUsageAccess(this);
+        // Granted: a later loss of access is not Android's restriction (below).
+        if (hasAccess && p.contains(State.ASKED_USAGE_ACCESS)) p.edit().remove(State.ASKED_USAGE_ACCESS).apply();
         boolean unrestricted = getSystemService(PowerManager.class)
                 .isIgnoringBatteryOptimizations(getPackageName());
         boolean connected = DriveAuth.connected(this);
         boolean expired = DriveAuth.needsReconnect(this);
+        boolean firstRun = days == null || days.length == 0;   // nothing collected yet
+        // Asked, came back, still no access: on Android 15+ most likely its
+        // restriction on apps installed from a file ("App was denied access").
+        // Earlier versions never refuse usage access. (35, not the constant:
+        // the app is compiled against 34.)
+        boolean blocked = Build.VERSION.SDK_INT >= 35
+                && !hasAccess && p.getBoolean(State.ASKED_USAGE_ACCESS, false);
 
         StringBuilder s = new StringBuilder();
         s.append("Collected: ").append(when(p, State.LAST_COLLECT_AT)).append('\n')
@@ -141,9 +159,21 @@ public class DumpActivity extends Activity {
                 .append(hasAccess ? "✓ Usage access granted\n" : "✗ Usage access missing — nothing can be collected\n")
                 .append(unrestricted ? "✓ Allowed to run in the background\n"
                         : "✗ Battery-restricted — scheduled runs may be skipped\n");
-        status.setText(s);
+        if (blocked) s.append('\n').append(RESTRICTED);
+        if (firstRun) {
+            // A first run that failed before writing any day file shows only here.
+            String lastRun = hasAccess && p.getLong(State.LAST_COLLECT_AT, 0L) != 0L
+                    ? when(p, State.LAST_COLLECT_AT) + ": " + p.getString(State.LAST_COLLECT_RESULT, "—") : null;
+            status.setText(guide(hasAccess, unrestricted, connected && !expired, blocked, lastRun));
+        } else {
+            status.setText(s);
+        }
 
+        dashboard.setVisibility(firstRun ? View.GONE : View.VISIBLE);
+        // Without usage access a run can only fail; while busy it shows what is going on.
+        runNow.setVisibility(hasAccess || busy ? View.VISIBLE : View.GONE);
         access.setVisibility(hasAccess ? View.GONE : View.VISIBLE);
+        appInfo.setVisibility(blocked ? View.VISIBLE : View.GONE);
         battery.setVisibility(unrestricted ? View.GONE : View.VISIBLE);
         showsDisconnect = connected && !expired;
         drive.setText(expired ? "Reconnect Google Drive"
@@ -152,6 +182,42 @@ public class DumpActivity extends Activity {
         runNow.setEnabled(!busy);
         drive.setEnabled(!busy);
         stopDrive.setEnabled(!busy);
+    }
+
+    private static final String RESTRICTED = "Android blocked usage access? It does that for apps installed"
+            + " from a file. Tap Open App info, then ⋮ (top right) → Allow restricted settings, and tap"
+            + " Grant usage access again.\n";
+
+    /** The first-run guide: the setup steps in order, each ticked once it is done. */
+    private CharSequence guide(boolean hasAccess, boolean unrestricted, boolean driveOn, boolean blocked,
+                               String lastRun) {
+        StringBuilder g = new StringBuilder("<b>Getting started</b>");
+        g.append(step(1, "Usage access", hasAccess))
+                .append("Lets the app read Android's own record of which apps you use. Tap <b>Grant usage"
+                        + " access</b>, find Usage Dump and switch it on.");
+        if (blocked) g.append("<br><br>").append(TextUtils.htmlEncode(RESTRICTED.trim()));
+        g.append(step(2, "Run in the background", unrestricted))
+                .append("So it can collect every 6 hours on its own. Tap <b>Let it run in the background</b>,"
+                        + " then <b>Allow</b>.");
+        g.append(step(3, "Google Drive backup (optional)", driveOn))
+                .append("Keeps your history in your own Google Drive, where only you can see it. Without it,"
+                        + " everything stays on this phone: uninstalling the app or changing phones loses it."
+                        + " You can connect any time; everything collected so far uploads then.");
+        g.append(step(4, "Collect", false))
+                .append(hasAccess ? "Tap <b>Run now</b>." : "Once usage access is on, tap <b>Run now</b>.")
+                .append(" The first run reads back what the phone still remembers, usually about 10 days."
+                        + " Then <b>Open dashboard</b> shows your numbers.");
+        if (lastRun != null) g.append("<br><br>Last run ").append(TextUtils.htmlEncode(lastRun));
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            g.append("<br><br>Notifications are off, so the app can't tell you if collecting stops."
+                    + " Turn them on in Settings → Apps → Usage Dump → Notifications.");
+        }
+        return Html.fromHtml(g.toString(), Html.FROM_HTML_MODE_COMPACT);
+    }
+
+    private static String step(int n, String title, boolean done) {
+        return "<br><br><b>" + n + ". " + title + (done ? "  ✓" : "") + "</b><br>";
     }
 
     private static String when(SharedPreferences p, String key) {
@@ -163,7 +229,11 @@ public class DumpActivity extends Activity {
         background("Collecting…", () -> {
             CollectorJob.collectNow(this, CollectorJob.BY_RUN_NOW);
             if (DriveAuth.connected(this)) {
-                runOnUiThread(() -> runNow.setText("Uploading…"));
+                // The day files are written: the dashboard needn't wait for the upload.
+                runOnUiThread(() -> {
+                    runNow.setText("Uploading…");
+                    refresh();
+                });
                 CollectorJob.uploadNow(this);
             }
         });

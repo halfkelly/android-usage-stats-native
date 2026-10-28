@@ -77,8 +77,9 @@ once the phone has been quiet for a day.
      and privacy) for the install, then back on.
    - Play Protect may warn that it doesn't know the app: **More details →
      Install anyway**. It's not from the Play Store, that's all.
-2. Open **Usage Dump** and allow notifications when it asks. Then tap the
-   setup buttons below **Run now**, top to bottom:
+2. Open **Usage Dump** and allow notifications when it asks. Until the first
+   collection the app shows these steps itself, as **Getting started**. Tap
+   the setup buttons, top to bottom:
    **Grant usage access** (find Usage Dump, switch it on, come back),
    **Let it run in the background** (Allow), then, if you want a backup,
    **Connect Google Drive**: pick your Google account, then **Allow**. If Google

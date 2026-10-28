@@ -19,6 +19,7 @@ final class State {
     static final String ACCOUNT_NAME = "account_name";   // the phone's Google account, when signed in that way
     static final String ACCESS_TOKEN = "access_token";
     static final String NEEDS_RECONNECT = "needs_reconnect";
+    static final String ASKED_USAGE_ACCESS = "asked_usage_access";   // Grant usage access tapped since access was last on
     static final String FOLDER_PREFIX = "folder:";   // folder:<rel dir> -> Drive id; folder:@top = PhoneUsage
     static final String LAYOUT_V2 = "layout_v2";     // the inbox is PhoneUsage/phone, not top-level
     static final String UPLOADED_PREFIX = "up:";     // up:<rel path> -> id|mtime|size

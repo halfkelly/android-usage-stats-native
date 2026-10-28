@@ -42,9 +42,19 @@ public class DashboardActivity extends Activity {
         web.loadUrl("file:///android_asset/dashboard.html");
     }
 
+    private final Runnable leave = this::finish;
+
+    /** Back closes an open dialog ("How to read this") first, then the dashboard. */
     @Override
     public void onBackPressed() {
-        finish();
+        // The page can be busy for seconds while it collects: don't make Back wait for it.
+        web.postDelayed(leave, 300);
+        web.evaluateJavascript(
+                "(function(){var d=document.querySelector('dialog[open]');if(d){d.close();return 1}return 0})()",
+                r -> {
+                    web.removeCallbacks(leave);
+                    if (!"1".equals(r)) finish();
+                });
     }
 
     @Override

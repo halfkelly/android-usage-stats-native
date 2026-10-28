@@ -178,23 +178,39 @@ def _write_meta(data: dict) -> Path:
 PACKAGE_RE = re.compile(r"^[A-Za-z0-9_.]+$")
 
 
+def _package_names(value) -> list[str]:
+    """The stored list as the dashboards read it: package names, nothing else."""
+    if not isinstance(value, list):
+        return []
+    return sorted({p for p in value if isinstance(p, str) and PACKAGE_RE.match(p)})
+
+
 def excluded_apps() -> list[str]:
     try:
         value = _read_meta().get("excluded_apps", [])
     except (FileNotFoundError, TimezoneError):
         return []
-    return sorted({p for p in value if isinstance(p, str) and PACKAGE_RE.match(p)})
+    return _package_names(value)
 
 
-def set_excluded_apps(packages) -> list[str]:
-    cleaned = sorted({str(p).strip() for p in packages if str(p).strip()})
-    bad = [p for p in cleaned if not PACKAGE_RE.match(p)]
-    if bad:
-        raise ValueError(f"not package names: {', '.join(bad[:3])}")
+def set_excluded_apps(packages, shown=None) -> list[str]:
+    """Store the excluded apps. With `shown`, the apps a page listed (those used
+    in its range), only they change and every other exclusion stays, merged
+    against what is stored now rather than what the page loaded. Without it,
+    `packages` is the whole list."""
     try:
         data = _read_meta()
     except FileNotFoundError:
         data = {}
+    if shown is not None:
+        # Keep only what the dashboards could read: a hand-edited bad entry
+        # would otherwise fail every save, and the page could never remove it.
+        listed = {str(p).strip() for p in shown}
+        packages = [p for p in _package_names(data.get("excluded_apps")) if p not in listed] + list(packages)
+    cleaned = sorted({str(p).strip() for p in packages if str(p).strip()})
+    bad = [p for p in cleaned if not PACKAGE_RE.match(p)]
+    if bad:
+        raise ValueError(f"not package names: {', '.join(bad[:3])}")
     data["excluded_apps"] = cleaned
     _write_meta(data)
     return cleaned

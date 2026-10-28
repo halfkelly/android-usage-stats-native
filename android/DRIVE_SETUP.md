@@ -64,11 +64,14 @@ that it uploads every 6 hours on its own.
 
 ## If uploads stop
 
-The app shows a notification, and the status screen says why:
+The app shows a notification (as long as the phone still lets it run), and
+the status screen says why:
 
 - **"sign-in has expired"**: Testing-mode expiry (above), or the grant was
-  removed at <https://myaccount.google.com/permissions>. Tap the notification,
-  pick the account, **Allow**. Everything collected meanwhile uploads.
+  removed at <https://myaccount.google.com/permissions>. Tap the notification
+  (or **Reconnect Google Drive** on the status screen), pick the account,
+  **Allow**. Everything collected meanwhile uploads. **Disconnect Google
+  Drive** instead stops uploading, and the reminders with it.
 - **"(will retry)"**: no network or a Drive hiccup. It retries on its own.
 - **"Google sign-in: …"** straight after picking the account: the account
   isn't a test user while the app is in Testing, or the Android client's

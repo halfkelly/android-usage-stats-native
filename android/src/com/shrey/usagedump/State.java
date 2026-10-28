@@ -15,7 +15,7 @@ final class State {
     static final String LAST_COLLECT_AT = "last_collect_at";       // last attempt, success or not
     static final String LAST_UPLOAD_RESULT = "last_upload_result";
     static final String LAST_UPLOAD_AT = "last_upload_at";
-    static final String LAST_UPLOAD_OK_MS = "last_upload_ok_ms";   // last upload that fully succeeded
+    static final String LAST_UPLOAD_OK_MS = "last_upload_ok_ms";   // last upload that fully succeeded, or sign-in
     static final String ACCOUNT_NAME = "account_name";   // the phone's Google account, when signed in that way
     static final String ACCESS_TOKEN = "access_token";
     static final String NEEDS_RECONNECT = "needs_reconnect";

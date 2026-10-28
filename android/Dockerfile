@@ -1,7 +1,7 @@
 # Builds the phone app: `docker compose run --rm apk` (runs android/build.sh).
 # JDK 17 and the Android SDK pieces build.sh needs -- the same versions as the
-# tools/ folder it replaces. android/debug.keystore and oauth.properties are
-# read from the mounted android/ folder, never baked in.
+# tools/ folder it replaces. android/debug.keystore (the signing key) is read
+# from the mounted android/ folder, never baked in.
 FROM eclipse-temurin:17-jdk-jammy
 
 RUN apt-get update \

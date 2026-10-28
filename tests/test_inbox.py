@@ -255,6 +255,23 @@ def test_in_docker_the_page_cannot_stop_the_dashboard(tmp_path, monkeypatch):
     assert client.post("/api/stop", headers={"X-Dashboard": "1"}).status_code == 409
 
 
+def test_saving_exclusions_changes_only_the_apps_the_page_listed(tmp_path):
+    """The page lists only the apps used in its range, and another tab may have
+    changed the stored list since it loaded: merge against what is stored."""
+    from wellbeing import archive
+    from wellbeing.server import create_app
+    archive.set_excluded_apps(["com.youtube", "com.a"])
+    client = create_app(tmp_path / "u.db").test_client()
+    r = client.post("/api/excluded", json={"shown": ["com.a", "com.b"], "packages": ["com.b"]})
+    assert r.get_json()["excluded_apps"] == ["com.b", "com.youtube"]   # com.a counts again
+    assert archive.excluded_apps() == ["com.b", "com.youtube"]
+    r = client.post("/api/excluded", json={"packages": ["com.c"]})     # no list shown: replace
+    assert r.get_json()["excluded_apps"] == ["com.c"]
+    archive._write_meta({"excluded_apps": ["com.c", "Google Chrome", " com.a", {"x": 1}]})  # hand-edited
+    r = client.post("/api/excluded", json={"shown": ["com.b"], "packages": []})
+    assert r.get_json()["excluded_apps"] == ["com.c"]                  # what the page could see, no more
+
+
 def _fresh_drive(tmp_path, monkeypatch, device=True):
     """A friend's Drive after the phone's first upload: PhoneUsage/phone, no archive."""
     from wellbeing import archive

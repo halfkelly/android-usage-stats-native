@@ -173,8 +173,8 @@ final class DriveUploader {
             String[] s = stored(p, rel);
             String id = s != null ? s[0] : null;
             if (id == null) {
-                // After a reinstall or a reconnect the ids are gone, but the
-                // files are still in Drive under the same names.
+                // After a reinstall, a Disconnect or a change of account the ids
+                // are gone; files this app already made in that Drive are found by name.
                 id = children(folder(dir)).get(name);
             }
             Http.Response r = null;

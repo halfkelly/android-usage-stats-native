@@ -176,8 +176,8 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
       <summary>Exclude apps from totals</summary>
       <p class="note" style="margin:8px 0 10px">
         Unticked apps are left out of every statistic — totals, the app list, the
-        day blocks, and the pickup and switch-chain analysis. Shared with your
-        other computer.
+        day blocks, and the pickup and switch-chain analysis.
+        <span id="exclude-scope">Shared with your other computer.</span>
       </p>
       <div id="exclude-list"></div>
     </details>
@@ -248,7 +248,7 @@ details summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
     <h3>Where the numbers come from</h3>
     <dl>
       <dt>Collection</dt><dd>The Usage Dump app on the phone records Android's own usage events every 6 hours and uploads them to Google Drive. Opening this page, or <b>Get phone data</b>, reads the latest upload, so the newest data can be up to about 6 hours old. <b>Run now</b> in the app makes it current.</dd>
-      <dt>Days and hours</dt><dd>Cut in India time (Asia/Kolkata). A day runs from midnight to midnight.</dd>
+      <dt>Days and hours</dt><dd>Cut in the phone's time zone (on the PC, the zone the archive was set up in). A day runs from midnight to midnight.</dd>
       <dt>Date range</dt><dd><b>Today</b> and <b>Yesterday</b>, or any range with the two date boxes. Click a bar in "Screen time per day" to see that day alone.</dd>
     </dl>
 
@@ -389,7 +389,7 @@ function drawApps(host, apps) {
     hit.addEventListener("mousemove", e => showTip(e,
       `<b>${a.label}</b><br>${fmt(a.ms)} · opened ${a.opens}×<br><span style="opacity:.7">click for day-by-day</span>`));
     hit.addEventListener("mouseleave", hideTip);
-    hit.addEventListener("click", () => { state.scrollToApp = true; openApp(a.package); });
+    hit.addEventListener("click", () => { state.scrollToApp = true; state.openPkg = a.package; openApp(a.package); });
     svg.append(hit);
   });
   host.append(svg);
@@ -584,7 +584,6 @@ function barChart(host, rows, opts) {
 }
 
 async function openApp(pkg) {
-  state.openPkg = pkg;
   const r = await fetch(`/api/app/${encodeURIComponent(pkg)}?` + (state.start && state.end
     ? new URLSearchParams({ start: state.start, end: state.end, system: state.system ? "1" : "0" })
     : new URLSearchParams({ range: state.range, system: state.system ? "1" : "0" })));
@@ -699,13 +698,16 @@ document.getElementById("exclude-list").addEventListener("change", e => {
 
 async function saveExclusions() {
   const list = document.getElementById("exclude-list");
-  const packages = [...list.querySelectorAll("input[data-pkg]")]
-    .filter(b => !b.checked).map(b => b.dataset.pkg);   // unticked = don't count
+  const boxes = [...list.querySelectorAll("input[data-pkg]")];
+  // The list holds only the apps used in this range: only they change, and
+  // whatever stores the list keeps its exclusions of the rest.
+  const shown = boxes.map(b => b.dataset.pkg);
+  const packages = boxes.filter(b => !b.checked).map(b => b.dataset.pkg);   // unticked = don't count
   const pageY = window.scrollY, listY = list.scrollTop;
   try {
     const r = await fetch("/api/excluded", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ packages }),
+      body: JSON.stringify({ shown, packages }),
     });
     if (!(await r.json()).ok) throw new Error("save failed");
     await load();
@@ -782,9 +784,12 @@ function render() {
   safe("hours", () => { drawHourProfile(document.getElementById("c-hourprofile"), d.hourly, d.totals.active_days); });
   safe("pickups", () => { drawPickups(d.pickup_summary); });
   safe("table", () => { drawTable(d); });
-  // WhatsApp dominates this phone's usage, so the drill-down opens on it rather
-  // than waiting for a click; any other app replaces it.
-  safe("app detail", () => openApp(state.openPkg || "com.whatsapp"));
+  // Until an app is clicked, the drill-down shows the range's most used one.
+  safe("app detail", () => {
+    const pkg = state.openPkg || (d.apps[0] && d.apps[0].package);
+    if (pkg) openApp(pkg);
+    else document.getElementById("appdetail-card").hidden = true;
+  });
 }
 
 async function load() {
@@ -848,7 +853,8 @@ document.getElementById("stop").addEventListener("click", async () => {
 async function syncFromDrive(auto) {
   const btn = document.getElementById("sync"), msg = document.getElementById("syncmsg");
   btn.disabled = true; msg.className = "sub";
-  msg.textContent = auto ? "checking Drive for new phone data…" : "reading the phone's uploads…";
+  msg.textContent = window.PHONE ? "collecting on the phone…"
+    : auto ? "checking Drive for new phone data…" : "reading the phone's uploads…";
   try {
     const r = await fetch("/api/sync", { method: "POST" });
     const j = await r.json();

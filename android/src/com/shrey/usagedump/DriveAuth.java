@@ -43,6 +43,11 @@ final class DriveAuth {
         return State.get(c).getString(State.ACCOUNT_NAME, null) != null;
     }
 
+    /** Signed in, but Google wants Drive access allowed again (the grant was removed or expired). */
+    static boolean needsReconnect(Context c) {
+        return State.get(c).getBoolean(State.NEEDS_RECONNECT, false);
+    }
+
     /** Which account uploads go to, for the status screen. */
     static String accountName(Context c) {
         return State.get(c).getString(State.ACCOUNT_NAME, null);
@@ -64,7 +69,14 @@ final class DriveAuth {
                 new Account(name, ACCOUNT_TYPE), TOKEN_TYPE, null, a, null, null);
         String token = tokenFrom(f, 10 * 60);  // the user may take a while on the Allow screen
         if (token == null) throw new AuthException("Google didn't grant access");
-        State.get(a).edit().putString(State.ACCOUNT_NAME, name).putString(State.ACCESS_TOKEN, token)
+        SharedPreferences p = State.get(a);
+        SharedPreferences.Editor e = p.edit();
+        // Reconnecting may pick another account, whose Drive has none of these ids.
+        if (!name.equals(p.getString(State.ACCOUNT_NAME, name))) forgetDriveIds(p, e);
+        // A new grant gets a day's grace, as a bad network does: until its first
+        // upload, "Nothing uploaded since …" would be about the old one.
+        if (p.getLong(State.LAST_UPLOAD_OK_MS, 0L) > 0) e.putLong(State.LAST_UPLOAD_OK_MS, System.currentTimeMillis());
+        e.putString(State.ACCOUNT_NAME, name).putString(State.ACCESS_TOKEN, token)
                 .remove(State.NEEDS_RECONNECT).apply();
     }
 
@@ -83,7 +95,8 @@ final class DriveAuth {
             p.edit().putBoolean(State.NEEDS_RECONNECT, true).apply();
             throw new AuthException("Google needs you to allow Drive access again");
         }
-        p.edit().putString(State.ACCESS_TOKEN, token).apply();
+        // A token again (access was allowed some other way): nothing to reconnect.
+        p.edit().putString(State.ACCESS_TOKEN, token).remove(State.NEEDS_RECONNECT).apply();
         return token;
     }
 
@@ -106,14 +119,20 @@ final class DriveAuth {
         // The grant itself stays listed at myaccount.google.com until removed there.
         if (access != null) AccountManager.get(c).invalidateAuthToken(ACCOUNT_TYPE, access);
         SharedPreferences.Editor e = p.edit();
-        // Folder and file ids may belong to an account that is about to change;
-        // the uploader finds them again by name after the next sign-in.
+        forgetDriveIds(p, e);   // the next sign-in may be another account
+        e.remove(State.ACCESS_TOKEN).remove(State.NEEDS_RECONNECT).remove(State.ACCOUNT_NAME)
+                .remove("refresh_token").remove("access_expires_ms")   // left by the old code sign-in
+                .apply();
+    }
+
+    /**
+     * Folder and file ids belong to one account's Drive. Without them the
+     * uploader finds the folders again by name, or creates them in the new Drive.
+     */
+    private static void forgetDriveIds(SharedPreferences p, SharedPreferences.Editor e) {
         for (String k : p.getAll().keySet()) {
             if (k.startsWith(State.FOLDER_PREFIX) || k.startsWith(State.UPLOADED_PREFIX)) e.remove(k);
         }
-        e.remove(State.ACCESS_TOKEN).remove(State.NEEDS_RECONNECT).remove(State.ACCOUNT_NAME)
-                .remove(State.LAYOUT_V2)
-                .remove("refresh_token").remove("access_expires_ms")   // left by the old code sign-in
-                .apply();
+        e.remove(State.LAYOUT_V2);
     }
 }

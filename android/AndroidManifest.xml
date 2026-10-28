@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.shrey.usagedump"
-    android:versionCode="12" android:versionName="2.10">
+    android:versionCode="13" android:versionName="2.11">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -25,7 +25,7 @@
          without this. Sideloaded, so Play's restrictions on it don't apply. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
-    <!-- Not debuggable: a debuggable app's private files, the Drive refresh
+    <!-- Not debuggable: a debuggable app's private files, the Drive access
          token among them, can be read by anyone with the unlocked phone and a
          cable (`run-as`). DEBUGGABLE=1 bash build.sh makes one for testing. -->
     <application android:label="Usage Dump"
@@ -37,8 +37,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- configChanges: rotating, split screen or dark mode would otherwise
+             rebuild the page from scratch, losing the range and drill-down and
+             collecting again; the page redraws itself on resize. -->
         <activity android:name=".DashboardActivity" android:exported="false"
                   android:label="Dashboard"
+                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
                   android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
         <receiver android:name=".ScheduleReceiver" android:exported="false">
             <intent-filter>

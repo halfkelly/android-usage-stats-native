@@ -11,7 +11,7 @@ import android.text.format.DateUtils;
 
 /**
  * One notification, shown only when something needs you, and cleared as soon
- * as it doesn't. Without it a problem shows only on the status screen, and the
+ * as it doesn't (plus the odd "it worked", under an id of its own). Without it a problem shows only on the status screen, and the
  * phone keeps raw events for about ten days -- a week of not looking is data
  * gone. Checked at the end of every collect and upload, and when the app opens.
  *
@@ -23,6 +23,8 @@ final class Notifier {
 
     private static final String CHANNEL = "problems";
     private static final int ID = 1;
+    // check() cancels ID whenever nothing is wrong, which mustn't take "it worked" with it.
+    private static final int ANNOUNCE_ID = 2;
     // A run or two can fail on a bad network without anyone needing to know.
     static final long STALE_MS = 24 * 3600_000L;
 
@@ -41,9 +43,9 @@ final class Notifier {
                 .build());
     }
 
-    /** A one-off "it worked" message, e.g. after connecting Drive from the browser. */
+    /** A one-off "it worked" message, e.g. after connecting Drive. */
     static void announce(Context c, String title, String text) {
-        c.getSystemService(NotificationManager.class).notify(ID, build(c, title, text, false)
+        c.getSystemService(NotificationManager.class).notify(ANNOUNCE_ID, build(c, title, text, false)
                 .setSmallIcon(android.R.drawable.stat_sys_upload_done)
                 .setAutoCancel(true)
                 .setTimeoutAfter(10 * 60_000L)
@@ -55,7 +57,11 @@ final class Notifier {
         NotificationManager nm = c.getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(
                 CHANNEL, "Usage Dump status", NotificationManager.IMPORTANCE_DEFAULT));
-        Intent i = new Intent(c, DumpActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // The reconnect tap clears the task to a fresh status screen, so onCreate
+        // sees EXTRA_CONNECT even when the app is open. Other taps open on top,
+        // keeping an open dashboard.
+        Intent i = new Intent(c, DumpActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | (connect ? Intent.FLAG_ACTIVITY_CLEAR_TOP : 0))
                 .putExtra(DumpActivity.EXTRA_CONNECT, connect);
         PendingIntent open = PendingIntent.getActivity(c, connect ? 1 : 0, i,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);

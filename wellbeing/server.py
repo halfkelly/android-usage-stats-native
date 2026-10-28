@@ -69,8 +69,8 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
             "hourly": stats.hourly(c, start, end, include_chrome, exclude=excluded),
             "day_blocks": stats.day_blocks(c, start, end, include_chrome, exclude=excluded),
             "excluded_apps": excluded,
-            # the panel must list every app, or an excluded one could never be
-            # ticked back on
+            # every app used in the range, excluded ones too, so one can be
+            # ticked back on; the page keeps exclusions of apps it doesn't list
             "app_choices": stats.top_apps(c, start, end, limit=500,
                                           include_chrome=include_chrome),
             "coverage": cov,
@@ -99,11 +99,12 @@ def create_app(db_path: str | Path = db.DEFAULT_DB) -> Flask:
     @app.post("/api/excluded")
     def set_excluded():
         """Save the shared list of apps left out of screen time totals."""
-        packages = (request.json or {}).get("packages", [])
-        if not isinstance(packages, list):
-            return jsonify({"ok": False, "error": "packages must be a list"}), 400
+        body = request.json or {}
+        packages, shown = body.get("packages", []), body.get("shown")
+        if not isinstance(packages, list) or not (shown is None or isinstance(shown, list)):
+            return jsonify({"ok": False, "error": "packages and shown must be lists"}), 400
         try:
-            saved = archive.set_excluded_apps(packages)
+            saved = archive.set_excluded_apps(packages, shown)
         except (ValueError, archive.TimezoneError) as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
         return jsonify({"ok": True, "excluded_apps": saved})

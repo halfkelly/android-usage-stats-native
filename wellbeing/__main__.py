@@ -21,7 +21,7 @@ def cmd_report(args) -> int:
     conn = db.connect(args.db)
     cov = stats.coverage(conn)
     if not cov["days"]:
-        print("No data yet. Run: python -m wellbeing sync")
+        print("No data yet. Run: python -m wellbeing ingest-phone")
         return 1
     start, end = stats.default_range(conn, args.days)
     print(f"{start} .. {end}   ({cov['event_count']:,} events, {cov['sync_count']} syncs)\n")
@@ -88,7 +88,7 @@ def cmd_export(args) -> int:
     conn = db.connect(args.db)
     cov = stats.coverage(conn)
     if not cov["days"]:
-        print("No data yet. Run: python -m wellbeing sync")
+        print("No data yet. Run: python -m wellbeing ingest-phone")
         return 1
     start, end = stats.default_range(conn, args.days) if args.days else (cov["days"][0], cov["days"][-1])
     written = export_mod.export_all(conn, start, end,

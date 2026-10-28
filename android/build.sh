@@ -38,7 +38,7 @@ fi
 
 # Release by default. DEBUGGABLE=1 adds android:debuggable, which lets
 # `adb shell run-as` read the app's private files -- useful for testing, but
-# that includes the Drive refresh token, so never for the phone in daily use.
+# that includes the Drive access token, so never for the phone in daily use.
 DEBUG_FLAG=""
 if [ "${DEBUGGABLE:-0}" = "1" ]; then DEBUG_FLAG="--debug-mode"; echo "note: DEBUGGABLE build"; fi
 # The dashboard: the PC's page, with phone.js loaded first to answer its

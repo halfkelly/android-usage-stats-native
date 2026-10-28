@@ -60,14 +60,17 @@
   // --- the data, read once and derived once ---------------------------------
   let D = null;           // {events, sessions, slices, pickups, days, labels}
   const fileCache = {};
+  let rereadFrom = "";    // day files from this one on may be rewritten by the next collection
 
   function readAll(force) {
+    const from = rereadFrom;
+    // A collection rewrites every day from the start of yesterday, or from its
+    // last successful run if that is older (Collector.collect); never run: all.
+    rereadFrom = `events-${dayStr(Math.min(Number(Bridge.lastCollectedMs()), Date.now() - 86400000))}`;
     const names = JSON.parse(Bridge.dayFiles()).sort();
     const keyed = new Map();
     for (const name of names) {
-      // Only today's and yesterday's files still change; the rest are final.
-      const recent = name >= `events-${addDays(dayStr(Date.now()), -1)}`;
-      if (force && recent) delete fileCache[name];
+      if (force && name >= from) delete fileCache[name];
       if (!(name in fileCache)) fileCache[name] = parseCsv(Bridge.readEvents(name));
       for (const e of fileCache[name]) keyed.set(`${e.ts}|${e.type}|${e.pkg}|${e.cls}`, e);
     }
@@ -531,7 +534,10 @@
         phone_collected_at_ms: Number(Bridge.lastCollectedMs()), phone_warning: phoneWarning(), archive_rows_added: 0 }];
     }
     if (path === "/api/excluded") {
-      const packages = JSON.parse((opts && opts.body) || "{}").packages || [];
+      const body = JSON.parse((opts && opts.body) || "{}");
+      // With `shown`, only those apps change; the other exclusions stay (archive.py does the same).
+      const shown = new Set(body.shown || []);
+      const packages = (body.shown ? excluded().filter(p => !shown.has(p)) : []).concat(body.packages || []);
       Bridge.setExcluded(JSON.stringify(packages));
       return [200, { ok: true, excluded_apps: packages }];
     }
@@ -558,10 +564,13 @@
     if (stop) stop.hidden = true;
     const sync = document.getElementById("sync");
     if (sync) sync.textContent = "Collect now";
+    const scope = document.getElementById("exclude-scope");
+    if (scope) scope.textContent = "Kept on this phone; a PC's dashboard has its own list.";
     const collection = [...document.querySelectorAll("#help dt")].find(dt => dt.textContent === "Collection");
     if (collection) collection.nextElementSibling.innerHTML =
       "Worked out on the phone from the app's own records, which it collects every 6 hours. " +
-      "<b>Collect now</b> brings it up to the minute. The PC's dashboard shows the same figures, plus history from before the app was installed.";
+      "<b>Collect now</b> brings it up to the minute. A PC's dashboard, if you use one, works the " +
+      "figures out the same way from what the app uploads to Google Drive.";
   });
 
   // For check.html: the computations, without the fetch layer.

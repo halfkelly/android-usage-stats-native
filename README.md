@@ -57,9 +57,12 @@ dashboard.bat** or a restart; closing the tab is fine. The Windows task
 PC is on again after missing one: it reads the phone's uploads into the
 database and the archive, and logs to `data\autosync.log`.
 
-If the phone stops uploading, the phone shows a notification (usage access
-off, Drive sign-in expired, nothing uploaded for a day). The dashboard and
-**Sync my phone.bat** also warn once it has been quiet for a day.
+If collecting or uploading goes wrong while the app still runs (usage access
+off, Drive sign-in expired, nothing uploaded for a day), the phone shows a
+notification. If the phone stops running the app in the background
+altogether, nothing on the phone can say so until you open Usage Dump, which
+shows when it last collected. The PC dashboard and **Sync my phone.bat** warn
+once the phone has been quiet for a day.
 
 ## Set it up
 
@@ -74,9 +77,10 @@ off, Drive sign-in expired, nothing uploaded for a day). The dashboard and
      and privacy) for the install, then back on.
    - Play Protect may warn that it doesn't know the app: **More details →
      Install anyway**. It's not from the Play Store, that's all.
-2. Open **Usage Dump** and tap what it shows, top to bottom:
+2. Open **Usage Dump** and allow notifications when it asks. Then tap the
+   setup buttons below **Run now**, top to bottom:
    **Grant usage access** (find Usage Dump, switch it on, come back),
-   **Let it run in the background** (Allow), allow notifications, then
+   **Let it run in the background** (Allow), then
    **Connect Google Drive**: pick your Google account, then **Allow**. If Google
    says it hasn't verified the app, tap **Continue**.
 3. Tap **Run now**. After a few seconds the status screen shows the days
@@ -133,7 +137,9 @@ archive.
 
 **Good to know:**
 - Tested on Samsung (Android 16). Other brands can be stricter with apps in
-  the background; if uploads stop, the app says so.
+  the background, and an app that isn't allowed to run can't warn you: there,
+  open Usage Dump every few days and check that **Collected** is recent (the
+  phone forgets after about 10 days).
 - History starts when the app is installed, plus the ~10 days the phone still
   remembers.
 - The laptop part is Windows only.
@@ -214,12 +220,14 @@ be compared with the Python server's.
 
 ## Leaving apps out of screen time
 
-Open **Exclude apps from totals** under "Most used apps" and untick any app. It
-then disappears from every statistic: screen time, the day blocks, the
+Open **Exclude apps from totals** under "Most used apps" and untick any app
+(the list holds the apps used in the range on screen). It then disappears from
+every statistic: screen time, the day blocks, the
 waking-hours share, the app list, the pickup analysis and the switch chains.
 Screen-on time, unlocks and notification counts are not app-based and never
-change. The list is stored in the archive's `archive.json`. It is not applied
-to the CSV export, so editing it never makes archived days incomparable.
+change. The PC's list is stored in the archive's `archive.json` and is not
+applied to the CSV export, so editing it never makes archived days
+incomparable. The phone's dashboard keeps a separate list, on the phone.
 
 ## What the dashboard shows
 
@@ -234,7 +242,8 @@ to the CSV export, so editing it never makes archived days incomparable.
 5. **Across the day**: six blocks plus an hour-by-hour profile.
 6. **Table view**.
 
-Range buttons: 1d / 3d / 7d / 14d / 30d / 90d / All. `WAKING_HOURS`
+Range: **Today**, **Yesterday**, or any span with the two date boxes; click a
+bar in Screen time per day to see that day alone. `WAKING_HOURS`
 (dashboard.html), `BOOKEND_TOLERANCE_MS` and `DAY_BLOCKS` (stats.py) are the
 assumptions worth knowing.
 
